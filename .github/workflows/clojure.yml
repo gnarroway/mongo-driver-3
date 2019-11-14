@@ -15,3 +15,5 @@ jobs:
       run:  sudo docker run --rm -d -p 27017:27017 mongo
     - name: Run tests
       run: lein test
+    - name: Publish
+      run: lein deploy clojars
