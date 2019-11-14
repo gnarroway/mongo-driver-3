@@ -7,7 +7,7 @@
            (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions UpdateOptions ReplaceOptions IndexOptions CreateCollectionOptions RenameCollectionOptions)
            (java.time ZoneId LocalDate LocalTime LocalDateTime)
            (java.util Date UUID)
-           (com.mongodb.client MongoDatabase)))
+           (com.mongodb.client FindIterable)))
 
 ;;; Unit
 
@@ -204,7 +204,7 @@
     (let [db (new-db @client)
           doc {:hello "world"}
           _ (mc/insert-one db "test" doc)
-          res (mc/find-maps db "test" {})]
+          res (mc/find db "test" {})]
       (is (= 1 (count res)))
       (is (= doc (select-keys (first res) [:hello])))))
 
@@ -225,7 +225,7 @@
                :localdatetime (LocalDateTime/now)
                :localtime     (LocalTime/now)}
           _ (mc/insert-one db "test" doc)
-          res (mc/find-one-as-map db "test" {} {:projection {:_id 0}})]
+          res (mc/find-one db "test" {} {:projection {:_id 0}})]
       (is (= {:nil           nil
               :string        "string"
               :int           1
@@ -245,7 +245,7 @@
   (testing "basic insertions"
     (let [db (new-db @client)
           _ (mc/insert-many db "test" [{:id 1} {:id 2}])
-          res (mc/find-maps db "test" {})]
+          res (mc/find db "test" {})]
       (is (= 2 (count res)))
       (is (= [1 2] (map :id res)))))
 
@@ -279,58 +279,74 @@
       (is (= 2 (.getDeletedCount (mc/delete-many db "test" {:v 1}))))
       (is (= 0 (.getDeletedCount (mc/delete-many db "test" {:v 1})))))))
 
-(deftest ^:integration test-find-maps
+(deftest ^:integration test-find
   (let [db (new-db @client)
         _ (mc/insert-many db "test" [{:id 1 :a 1 :v 2} {:id 2 :a 1 :v 3} {:id 3 :v 1}])]
 
     (testing "query"
-      (are [ids q] (= ids (map :id (mc/find-maps db "test" q)))
+      (are [ids q] (= ids (map :id (mc/find db "test" q)))
         [1 2 3] {}
         [1] {:id 1}
         [1 2] {:a {:$exists true}}
         [2] {:v {:$gt 2}}))
 
     (testing "sort"
-      (are [ids s] (= ids (map :id (mc/find-maps db "test" {} {:sort s})))
+      (are [ids s] (= ids (map :id (mc/find db "test" {} {:sort s})))
         [1 2 3] {}
         [3 1 2] {:v 1}
         [2 1 3] {:v -1}))
 
+    (testing "skip"
+      (are [cnt n] (= cnt (count (mc/find db "test" {} {:skip n})))
+        3 0
+        2 1
+        1 2
+        0 3))
+
     (testing "limit"
-      (are [cnt n] (= cnt (count (mc/find-maps db "test" {} {:limit n})))
+      (are [cnt n] (= cnt (count (mc/find db "test" {} {:limit n})))
         1 1
         2 2
         3 3
         3 4))
 
     (testing "projection"
-      (are [ks p] (= ks (keys (first (mc/find-maps db "test" {} {:projection p}))))
+      (are [ks p] (= ks (keys (first (mc/find db "test" {} {:projection p}))))
         [:_id :id :a :v] {}
         [:_id :a] {:a 1}
-        [:id :a :v] {:_id 0}))))
+        [:id :a :v] {:_id 0}))
 
-(deftest ^:integration test-find-one-as-map
+    (testing "raw"
+      (is (instance? FindIterable (mc/find db "test" {} {:raw? true}))))
+
+    (testing "keywordize"
+      (is (= [{"id" 1}] (mc/find db "test" {} {:keywordize? false :projection {:_id 0 :id 1} :limit 1}))))))
+
+(deftest ^:integration test-find-one
   (let [db (new-db @client)
         _ (mc/insert-many db "test" [{:id 1 :a 1 :v 2} {:id 2 :a 1 :v 3} {:id 3 :v 1}])]
 
     (testing "query"
-      (are [id q] (= id (:id (mc/find-one-as-map db "test" q)))
+      (are [id q] (= id (:id (mc/find-one db "test" q)))
         1 {}
         2 {:id 2}
         1 {:a {:$exists true}}
         2 {:v {:$gt 2}}))
 
     (testing "sort"
-      (are [id s] (= id (:id (mc/find-one-as-map db "test" {} {:sort s})))
+      (are [id s] (= id (:id (mc/find-one db "test" {} {:sort s})))
         1 {}
         3 {:v 1}
         2 {:v -1}))
 
     (testing "projection"
-      (are [ks p] (= ks (keys (mc/find-one-as-map db "test" {} {:projection p})))
+      (are [ks p] (= ks (keys (mc/find-one db "test" {} {:projection p})))
         [:_id :id :a :v] {}
         [:_id :a] {:a 1}
-        [:id :a :v] {:_id 0}))))
+        [:id :a :v] {:_id 0}))
+
+    (testing "keywordize"
+      (is (= {"id" 1} (mc/find-one db "test" {} {:keywordize? false :projection {:_id 0 :id 1}}))))))
 
 (deftest ^:integration test-count-documents
   (let [db (new-db @client)

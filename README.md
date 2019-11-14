@@ -19,7 +19,7 @@ It was developed with the following goals:
 
 ## Status
 
-mongo-driver-3 is under active development but the existing API is unlikely to break.
+mongo-driver-3 is under active development and the API may change.
 Please try it out and raise any issues you may find.
 
 ## Usage
@@ -31,7 +31,7 @@ For Leinengen, add this to your project.clj:
 [org.mongodb/mongodb-driver-sync "3.11.0"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.1.0"]
+[mongo-driver-3 "0.2.0"]
 ```
 
 ## License

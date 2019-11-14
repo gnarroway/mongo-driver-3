@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [find empty? drop])
   (:import (clojure.lang Ratio Keyword Named IPersistentMap)
            (com.mongodb ReadConcern ReadPreference WriteConcern MongoNamespace)
-           (com.mongodb.client MongoDatabase MongoCollection TransactionBody MongoCursor)
+           (com.mongodb.client MongoDatabase MongoCollection TransactionBody)
            (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions CreateCollectionOptions RenameCollectionOptions IndexOptions IndexModel UpdateOptions ReplaceOptions)
            (java.util List Collection)
            (java.util.concurrent TimeUnit)
@@ -47,7 +47,7 @@
     input))
 
 (defprotocol ConvertFromDocument
-  (from-document [input keywordize] "Converts given Document to Clojure"))
+  (from-document [input keywordize?] "Converts given Document to Clojure"))
 
 (extend-protocol ConvertFromDocument
   nil
@@ -62,12 +62,12 @@
     (.bigDecimalValue input))
 
   List
-  (from-document [^List input keywordize]
-    (vec (map #(from-document % keywordize) input)))
+  (from-document [^List input keywordize?]
+    (vec (map #(from-document % keywordize?) input)))
 
   Document
-  (from-document [^Document input keywordize]
-    (reduce (if keywordize
+  (from-document [^Document input keywordize?]
+    (reduce (if keywordize?
               (fn [m ^String k]
                 (assoc m (keyword k) (from-document (.get input k) true)))
               (fn [m ^String k]
@@ -132,8 +132,8 @@
                  write-concern
                  (WriteConcern/valueOf (name write-concern))))]
       (-> (or wc (WriteConcern/ACKNOWLEDGED))
-          (#(if (some? w) (.withW % w) %))
-          (#(if (some? w-timeout-ms) (.withWTimeout % w-timeout-ms (TimeUnit/MILLISECONDS)) %))
+          (#(if w (.withW % w) %))
+          (#(if w-timeout-ms (.withWTimeout % w-timeout-ms (TimeUnit/MILLISECONDS)) %))
           (#(if (some? journal?) (.withJournal % journal?) %))))))
 
 (defn collection
@@ -165,6 +165,35 @@
 
 ;;; CRUD functions
 
+(defn aggregate
+  "Aggregates documents according to the specified aggregation pipeline and returns an AggregateIterable.
+
+  Arguments:
+
+  - `db` is a MongoDatabase
+  - `coll` is a collection namee
+  - `q` is a map representing a query.
+  - `opts` (optional), a map of:
+    - `:allow-disk-use?` whether to allow writing temporary files
+    - `:batch-size` Documents to return per batch, e.g. 1
+    - `:bypass-document-validation?` Boolean
+    - `:keywordize?` keywordize the keys of return results, default: true
+    - `:raw?` return the mongo AggregateIterable directly instead of processing into a seq, default: false
+    - `:session` a ClientSession"
+  ([^MongoDatabase db coll pipeline]
+   (aggregate db coll pipeline {}))
+  ([^MongoDatabase db coll pipeline opts]
+   (let [{:keys [session allow-disk-use? batch-size bypass-document-validation? keywordize? raw?] :or {keywordize? true raw? false}} opts
+         it (-> (if session
+                  (.aggregate (collection db coll opts) session (document pipeline))
+                  (.aggregate (collection db coll opts) (document pipeline)))
+                (#(if (some? allow-disk-use?) (.allowDiskUse % allow-disk-use?) %))
+                (#(if batch-size (.batchSize % batch-size) %))
+                (#(if (some? bypass-document-validation?) (.bypassDocumentValidation % bypass-document-validation?) %)))]
+
+     (if-not raw?
+       (map (fn [x] (from-document x keywordize?)) (seq it))
+       it))))
 
 (defn ->CountOptions
   "Coerce options map into CountOptions. See `count-documents` for usage."
@@ -180,22 +209,19 @@
 (defn count-documents
   "Count documents in a collection, optionally matching a filter query `q`.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :hint an index name (string) hint or specification (map)
-  :max-time-ms max amount of time to allow the query to run, in milliseconds
-  :skip number of documents to skip before counting
-  :limit max number of documents to count
-
-  :count-options a CountOptions, for configuring directly. If specified, any
-    other query options will be applied to it.
-
-  -- other options
-  :session a ClientSession
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `opts` (optional), a map of:
+    - `:hint` an index name (string) hint or specification (map)
+    - `:max-time-ms` max amount of time to allow the query to run, in milliseconds
+    - `:skip` number of documents to skip before counting
+    - `:limit` max number of documents to count
+    - `:count-options` a CountOptions, for configuring directly. If specified, any
+       other [preceding] query options will be applied to it.
+    - `:session` a ClientSession
 
   Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll]
@@ -215,20 +241,18 @@
     opts))
 
 (defn delete-one
-  "Deletes a single document from a collection and returns a DeletedResult.
+  "Deletes a single document from a collection and returns a DeleteResult.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to match documents to delete.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :delete-options a DeleteOptions for configuring directly.
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `opts` (optional), a map of:
+    - `:delete-options` A DeleteOptions for configuring directly.
+    - `:session` A ClientSession
 
-  -- other options
-  :session A ClientSession
-
-  Additionally takes options specified in `collection`."
+  Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q]
    (delete-one db coll q {}))
   ([^MongoDatabase db coll q opts]
@@ -239,16 +263,14 @@
 (defn delete-many
   "Deletes multiple documents from a collection and returns a DeleteResult.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to match documents to delete.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :delete-options A DeleteOptions for configuring directly.
-
-  -- other options
-  :session A ClientSession
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `opts` (optional), a map of:
+    - `:delete-options` A DeleteOptions for configuring directly.
+    - `:session` A ClientSession
 
   Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q]
@@ -259,63 +281,47 @@
      (.deleteMany (collection db coll opts) (document q) (->DeleteOptions opts)))))
 
 (defn find
-  "Finds documents and returns a FindIterable.
+  "Finds documents and returns a seq of maps, unless configured otherwise.
 
-  This is a low level function that returns the result directly from the underling driver.
-  Use `find-maps` to do some post-processing, e.g. returning a lazy seq
-  of clojure maps with keyword keys.
+  Arguments:
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query.
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `opts` (optional), a map of:
+    - `:limit` Max number of documents to return, e.g. 1
+    - `:skip` Number of documents to skip, e.g. 1
+    - `:sort` document representing sort order, e.g. {:timestamp -1}
+    - `:projection` document representing fields to return, e.g. {:_id 0}
+    - `:keywordize?` keywordize the keys of return results, default: true
+    - `:raw?` return the mongo FindIterable directly instead of processing into a seq, default: false
+    - `:session` a ClientSession
 
-  Takes an options map:
-  :limit Number of results, e.g. 1
-  :sort document representing sort order, e.g. {:timestamp -1}
-  :projection document representing fields to return, e.g. {:_id 0}"
+  Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll q]
    (find db coll q {}))
   ([^MongoDatabase db coll q opts]
-   (let [{:keys [limit sort projection session]} opts]
-     (-> (if session
-           (.find (collection db coll opts) session (document q))
-           (.find (collection db coll opts) (document q)))
-         (#(if limit (.limit % limit) %))
-         (#(if sort (.sort % (document sort)) %))
-         (#(if projection (.projection % (document projection)) %))))))
+   (let [{:keys [limit skip sort projection session keywordize? raw?] :or {keywordize? true raw? false}} opts]
+     (let [it (-> (if session
+                    (.find (collection db coll opts) session (document q))
+                    (.find (collection db coll opts) (document q)))
+                  (#(if limit (.limit % limit) %))
+                  (#(if skip (.skip % skip) %))
+                  (#(if sort (.sort % (document sort)) %))
+                  (#(if projection (.projection % (document projection)) %)))]
 
-(defn find-maps
-  "Finds documents and returns them as a clojure seq of maps.
+       (if-not raw?
+         (map (fn [x] (from-document x keywordize?)) (seq it))
+         it)))))
 
-  Takes the same options as `find`, as well as:
-
-  :keywordize keywordize the keys of returns results, default: true
-  :session a ClientSession
-
-  Additionally takes options specified in `collection`."
-  ([^MongoDatabase db coll q]
-   (find-maps db coll q {}))
-  ([^MongoDatabase db coll q opts]
-   (let [{:keys [keywordize] :or {keywordize true}} opts]
-     (with-open [^MongoCursor iterator (.iterator (find db coll q opts))]
-       (doall (map (fn [x] (from-document x keywordize)) (iterator-seq iterator)))))))
-
-(defn find-one-as-map
+(defn find-one
   "Finds a single document and returns it as a clojure map, or nil if not found.
 
-  Takes the same options as `find`, as well as:
-
-  :keywordize keywordize the keys of returns results, default: true
-  :session a ClientSession
-
-  Additionally takes options specified in `collection`."
+  Takes the same options as `find`."
   ([^MongoDatabase db coll q]
-   (find-one-as-map db coll q {}))
+   (find-one db coll q {}))
   ([^MongoDatabase db coll q opts]
-   (let [{:keys [keywordize] :or {keywordize true}} opts]
-     (-> (find db coll q opts)
-         (.first)
-         (from-document keywordize)))))
+   (first (find db coll q (assoc opts :limit 1 :raw? false)))))
 
 (defn ->FindOneAndUpdateOptions
   "Coerce options map into FindOneAndUpdateOptions. See `find-one-and-update` for usage."
@@ -331,35 +337,32 @@
 (defn find-one-and-update
   "Atomically find a document (at most one) and modify it.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to find the document to update
-  `update` is a map representing an update. The update to apply must include only update operators.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :upsert? whether to insert a new document if nothing is found, default: false
-  :return-new? whether to return the document after update (insead of its state before the update), default: false
-  :sort map representing sort order, e.g. {:timestamp -1}
-  :projection map representing fields to return, e.g. {:_id 0}
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `update` is a map representing an update. The update to apply must include only update operators.
+  - `opts` (optional), a map of:
+    - `:upsert?` whether to insert a new document if nothing is found, default: false
+    - `:return-new?` whether to return the document after update (insead of its state before the update), default: false
+    - `:sort` map representing sort order, e.g. {:timestamp -1}
+    - `:projection` map representing fields to return, e.g. {:_id 0}
+    - `:find-one-and-update-options` A FindOneAndUpdateOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it.
+    - `:keywordize?` keywordize the keys of return results, default: true
+    - `:session` a ClientSession
 
-  :find-one-and-update-options A FindOneAndUpdateOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :keywordize keywordize the keys of returns results, default: true
-  :session a ClientSession
-
-  Additionally takes options specified in `collection`"
+  Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll q update]
    (find-one-and-update db coll q update {}))
   ([^MongoDatabase db coll q update opts]
-   (let [{:keys [keywordize session] :or {keywordize true}} opts
+   (let [{:keys [keywordize? session] :or {keywordize? true}} opts
          opts' (->FindOneAndUpdateOptions opts)]
      (-> (if session
            (.findOneAndUpdate (collection db coll opts) session (document q) (document update) opts')
            (.findOneAndUpdate (collection db coll opts) (document q) (document update) opts'))
-         (from-document keywordize)))))
+         (from-document keywordize?)))))
 
 (defn ->FindOneAndReplaceOptions
   "Coerce options map into FindOneAndReplaceOptions. See `find-one-and-replace` for usage."
@@ -375,35 +378,32 @@
 (defn find-one-and-replace
   "Atomically find a document (at most one) and replace it.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to find the document to update
-  `doc` is a new document to add.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :upsert? whether to insert a new document if nothing is found, default: false
-  :return-new? whether to return the document after update (insead of its state before the update), default: false
-  :sort map representing sort order, e.g. {:timestamp -1}
-  :projection map representing fields to return, e.g. {:_id 0}
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `doc` is a new document to add.
+  - `opts` (optional), a map of:
+    - `:upsert?` whether to insert a new document if nothing is found, default: false
+    - `:return-new?` whether to return the document after update (insead of its state before the update), default: false
+    - `:sort` map representing sort order, e.g. {:timestamp -1}
+    - `:projection` map representing fields to return, e.g. {:_id 0}
+    - `:find-one-and-replace-options` A FindOneAndReplaceOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it.
+    - `:keywordize?` keywordize the keys of return results, default: true
+    - `:session` a ClientSession
 
-  :find-one-and-replace-options A FindOneAndReplaceOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :keywordize keywordize the keys of returns results, default: true
-  :session a ClientSession
-
-  Additionally takes options specified in `collection`"
+  Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll q doc]
    (find-one-and-replace db coll q doc {}))
   ([^MongoDatabase db coll q doc opts]
-   (let [{:keys [keywordize session] :or {keywordize true}} opts
+   (let [{:keys [keywordize? session] :or {keywordize? true}} opts
          opts' (->FindOneAndReplaceOptions opts)]
      (-> (if session
            (.findOneAndReplace (collection db coll opts) session (document q) (document doc) opts')
            (.findOneAndReplace (collection db coll opts) (document q) (document doc) opts'))
-         (from-document keywordize)))))
+         (from-document keywordize?)))))
 
 (defn ->InsertOneOptions
   "Coerce options map into InsertOneOptions. See `insert-one` for usage."
@@ -414,22 +414,19 @@
     opts))
 
 (defn insert-one
-  "Inserts a single document into a collection.
+  "Inserts a single document into a collection, and returns nil.
   If the document does not have an _id field, it will be auto-generated by the underlying driver.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `doc` is a map to insert
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :bypass-document-validation? Boolean
-
-  :insert-one-options An InsertOneOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :session A ClientSession
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `doc` is a map to insert.
+  - `opts` (optional), a map of:
+    - `:bypass-document-validation?` Boolean
+    - `:insert-one-options` An InsertOneOptions for configuring directly. If specified,
+       any other [preceding] query options will be applied to it.
+    - `:session` A ClientSession
 
   Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll doc]
@@ -453,20 +450,17 @@
   "Inserts multiple documents into a collection.
   If a document does not have an _id field, it will be auto-generated by the underlying driver.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `docs` is a collection of maps to insert
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :bypass-document-valiation? Boolean
-  :ordered? Boolean whether serve should insert documents in order provided (default true)
-
-  :insert-many-options An InsertManyOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :session A ClientSession
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `docs` is a collection of maps to insert
+  - `opts` (optional), a map of:
+    - `:bypass-document-validation?` Boolean
+    - `:ordered?` Boolean whether serve should insert documents in order provided (default true)
+    - `:insert-many-options` An InsertManyOptions for configuring directly. If specified,
+      any other [preceding] query options will be applied to it.
+    - `:session` A ClientSession
 
   Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll docs]
@@ -487,23 +481,20 @@
     opts))
 
 (defn replace-one
-  "Replace a single document.
+  "Replace a single document in a collection and returns an UpdateResult.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to find the document to update
-  `doc` is a new document to add.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :upsert? whether to insert a new document if nothing is found, default: false
-  :bypass-document-validation?
-
-  :eplace-options A ReplaceOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :session a ClientSession
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `doc` is a new document to add.
+  - `opts` (optional), a map of:
+    - `:upsert?` whether to insert a new document if nothing is found, default: false
+    - `:bypass-document-validation?` Boolean
+    - `:replace-options` A ReplaceOptions for configuring directly. If specified,
+    any other [preceding[ query options will be applied to it.
+    - `:session` a ClientSession
 
   Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q doc]
@@ -514,7 +505,7 @@
      (.replaceOne (collection db coll opts) (document q) (document doc) (->ReplaceOptions opts)))))
 
 (defn ->UpdateOptions
-  "Coerce options map into UpdateOptions. See `updatee-one` and `update-many` for usage."
+  "Coerce options map into UpdateOptions. See `update-one` and `update-many` for usage."
   [{:keys [update-options upsert? bypass-document-validation?]}]
   (let [opts (or update-options (UpdateOptions.))]
     (when (some? upsert?) (.upsert opts upsert?))
@@ -523,25 +514,22 @@
     opts))
 
 (defn update-one
-  "Updates a single document from a collection and returns a UpdateResult.
+  "Updates a single document in a collection and returns an UpdateResult.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to match documents to update.
-  `update` is a map representing an update. The update to apply must include only update operators.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :upsert? Boolean whether to insert a new document if there are no matches to the query
-  :bypass-document-validation? Boolean
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `update` is a map representing an update. The update to apply must include only update operators.
+  - `opts` (optional), a map of:
+    - `:upsert?` whether to insert a new document if nothing is found, default: false
+    - `:bypass-document-validation?` Boolean
+    - `:update-options` An UpdateOptions for configuring directly. If specified,
+    any other [preceding[ query options will be applied to it.
+    - `:session` a ClientSession
 
-  :update-options an UpdateOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :session A ClientSession
-
-  Additionally takes options specified in `collection`."
+  Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q update]
    (update-one db coll q update {}))
   ([^MongoDatabase db coll q update opts]
@@ -550,25 +538,22 @@
      (.updateOne (collection db coll opts) (document q) (document update) (->UpdateOptions opts)))))
 
 (defn update-many
-  "Updates many documents from a collection and returns a UpdateResult.
+  "Updates many documents in a collection and returns an UpdateResult.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `q` is a map representing a query to match documents to update.
-  `update` is a map representing an update. The update to apply must include only update operators.
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :upsert? Boolean whether to insert a new document if there are no matches to the query
-  :bypass-document-validation? Boolean
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `q` is a map representing a query.
+  - `update` is a map representing an update. The update to apply must include only update operators.
+  - `opts` (optional), a map of:
+    - `:upsert?` whether to insert a new document if nothing is found, default: false
+    - `:bypass-document-validation?` Boolean
+    - `:update-options` An UpdateOptions for configuring directly. If specified,
+    any other [preceding[ query options will be applied to it.
+    - `:session` a ClientSession
 
-  :update-options an UpdateOptions for configuring directly. If specified,
-    any other query options will be applied to it.
-
-  -- other options
-  :session A ClientSession
-
-  Additionally takes options specified in `collection`."
+  Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q update]
    (update-many db coll q {}))
   ([^MongoDatabase db coll q update opts]
@@ -591,14 +576,16 @@
 (defn create
   "Creates a collection
 
-  Takes an options map:
-  -- query options
-  :capped? Boolean whether to create a capped collection
-  :max-documents max documents for a capped collection
-  :max-size-bytes max collection size in bytes for a capped collection
+  Arguments:
 
-  :create-collection-options A CreateCollectionOptions for configuring directly. If specified,
-    any other query options will be applied to it"
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `opts` (optional), a map of:
+    - `:capped?` Boolean whether to create a capped collection
+    - `:max-documents` max documents for a capped collection
+    - `:max-size-bytes` max collection size in bytes for a capped collection
+    - `:create-collection-options` A CreateCollectionOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it"
   ([^MongoDatabase db coll]
    (create db coll {}))
   ([^MongoDatabase db coll opts]
@@ -616,12 +603,15 @@
 (defn rename
   "Renames `coll` to `new-coll` in the same DB.
 
-  Takes an options map:
-  -- query options
-  :drop-target? Boolean drop tne target collection if it exists. Default: false
+  Arguments:
 
-  :rename-collection-options A RenameCollectionOptions for configuring directly. If specified,
-    any other query options will be applied to it"
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `new-coll` is the target collection name
+  - `opts` (optional), a map of:
+    - `:drop-target?` Boolean drop tne target collection if it exists. Default: false
+    - `:rename-collection-options` A RenameCollectionOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it"
   ([^MongoDatabase db coll new-coll]
    (rename db coll new-coll {}))
   ([^MongoDatabase db coll new-coll opts]
@@ -651,18 +641,17 @@
 (defn create-index
   "Creates an index
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `keys` is a document representing index keys, e.g. {:a 1}
+  Arguments:
 
-  Takes an options map:
-  -- query options
-  :name
-  :sparse?
-  :unique?
-
-  :index-options An IndexOptions for configuring directly. If specified,
-    any other query options will be applied to it"
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `keys` is a document representing index keys, e.g. {:a 1}
+  - `opts` (optional), a map of:
+    - `:name`
+    - `:sparse?`
+    - `:unique?`
+    - `:index-options` An IndexOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it"
   ([^MongoDatabase db coll keys]
    (create-index db coll keys {}))
   ([^MongoDatabase db coll keys opts]
@@ -671,15 +660,15 @@
 (defn create-indexes
   "Creates many indexes.
 
-  `db` is a MongoDatabase
-  `coll` is a collection name
-  `indexes` is a collection of maps with the following attributes:
+  Arguments:
 
-  -- required
-  :keys a document representing index keys, e.g. {:a 1}
-
-  -- optional
-  any attributes available in `->IndexOptions`"
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `indexes` is a collection of maps with the following keys:
+    - `:keys` (mandatory) a document representing index keys, e.g. {:a 1}
+    - `:name`
+    - `:sparse?`
+    - `:unique?`"
   ([^MongoDatabase db coll indexes]
    (create-indexes db coll indexes {}))
   ([^MongoDatabase db coll indexes opts]
