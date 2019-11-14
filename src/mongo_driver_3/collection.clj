@@ -605,17 +605,31 @@
    (let [opts' (->CreateCollectionOptions opts)]
      (.createCollection db coll opts'))))
 
+(defn ->RenameCollectionOptions
+  "Coerce options map into RenameCollectionOptions. See `rename` usage."
+  [{:keys [rename-collection-options drop-target?]}]
+  (let [opts (or rename-collection-options (RenameCollectionOptions.))]
+    (when (some? drop-target?) (.dropTarget opts drop-target?))
+
+    opts))
+
 (defn rename
-  "Renames `coll` to `new-coll` in the same DB."
-  [^MongoDatabase db coll new-coll opts]
-  (let [{:keys [drop-target?]} opts
-        opts' (RenameCollectionOptions.)]
+  "Renames `coll` to `new-coll` in the same DB.
 
-    (when drop-target? (.dropTarget opts' true))
+  Takes an options map:
+  -- query options
+  :drop-target? Boolean drop tne target collection if it exists. Default: false
 
-    (.renameCollection (collection db coll opts)
-                       (MongoNamespace. (.getName db) new-coll)
-                       opts')))
+  :rename-collection-options A RenameCollectionOptions for configuring directly. If specified,
+    any other query options will be applied to it"
+  ([^MongoDatabase db coll new-coll]
+   (rename db coll new-coll {}))
+  ([^MongoDatabase db coll new-coll opts]
+   (let [opts' (->RenameCollectionOptions opts)]
+
+     (.renameCollection (collection db coll opts)
+                        (MongoNamespace. (.getName db) new-coll)
+                        opts'))))
 
 (defn drop
   "Drops a collection from a database."
@@ -666,30 +680,24 @@
 
   -- optional
   any attributes available in `->IndexOptions`"
-  [^MongoDatabase db coll indexes]
-  (->> indexes
-       (map (fn [x] (IndexModel. (document (:keys x)) (->IndexOptions x))))
-       (.createIndexes (collection db coll))))
+  ([^MongoDatabase db coll indexes]
+   (create-indexes db coll indexes {}))
+  ([^MongoDatabase db coll indexes opts]
+   (->> indexes
+        (map (fn [x] (IndexModel. (document (:keys x)) (->IndexOptions x))))
+        (.createIndexes (collection db coll opts)))))
 
 (defn list-indexes
   "Lists indexes."
-  [^MongoDatabase db coll]
-  (->> (.listIndexes (collection db coll))
-       (map #(from-document % true))))
+  ([^MongoDatabase db coll]
+   (list-indexes db coll {}))
+  ([^MongoDatabase db coll opts]
+   (->> (.listIndexes (collection db coll opts))
+        (map #(from-document % true)))))
 
 ;;; Utility functions
 
-(defn empty?
-  "Returns true if a collection is empty"
-  [^MongoDatabase db coll]
-  (zero? (count-documents db coll)))
-
-(defn exists?
-  "Returns true if collection exists"
-  [^MongoDatabase db coll]
-  (some #(= coll %) (.listCollectionNames db)))
-
-(defn with-transaction
+(defn- with-transaction
   "Executes `body` in a transaction.
 
   `body` should be a fn with one or more mongo operations in it.

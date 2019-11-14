@@ -4,9 +4,10 @@
             [mongo-driver-3.collection :as mc])
   (:import (com.mongodb ReadConcern ReadPreference WriteConcern)
            (java.util.concurrent TimeUnit)
-           (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions UpdateOptions ReplaceOptions IndexOptions CreateCollectionOptions)
+           (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions UpdateOptions ReplaceOptions IndexOptions CreateCollectionOptions RenameCollectionOptions)
            (java.time ZoneId LocalDate LocalTime LocalDateTime)
-           (java.util Date UUID)))
+           (java.util Date UUID)
+           (com.mongodb.client MongoDatabase)))
 
 ;;; Unit
 
@@ -96,6 +97,16 @@
   (is (instance? DeleteOptions (mc/->DeleteOptions {})))
   (let [opts (DeleteOptions.)]
     (is (= opts (mc/->DeleteOptions {:delete-options opts})) "configure directly")))
+
+(deftest test->RenameCollectionOptions
+  (is (instance? RenameCollectionOptions (mc/->RenameCollectionOptions {})))
+  (are [expected arg]
+       (= expected (.isDropTarget (mc/->RenameCollectionOptions {:drop-target? arg})))
+    true true
+    false false
+    false nil)
+  (let [opts (RenameCollectionOptions.)]
+    (is (= opts (mc/->RenameCollectionOptions {:rename-collection-options opts})) "configure directly")))
 
 (deftest test->FindOneAndUpdateOptions
   (is (instance? FindOneAndUpdateOptions (mc/->FindOneAndUpdateOptions {})))
@@ -460,3 +471,62 @@
         (is (= 0 (.getMatchedCount res)))
         (is (= 0 (.getModifiedCount res)))
         (is (some? (.getUpsertedId res)))))))
+
+(defn- coll-exists?
+  "Returns true if collection exists"
+  [db coll]
+  (some #(= coll %) (.listCollectionNames db)))
+
+(deftest ^:integration test-create
+  (testing "not existing"
+    (let [db (new-db @client)
+          _ (mc/create db "my-coll")]
+      (is (true? (coll-exists? db "my-coll")))))
+
+  (testing "existing"
+    (let [db (new-db @client)
+          _ (mc/create db "my-coll")]
+      (is (thrown? Exception (mc/create db "my-coll"))))))
+
+(deftest ^:integration test-rename
+  (testing "not existing"
+    (let [db (new-db @client)
+          _ (mc/create db "old")
+          _ (mc/rename db "old" "new")]
+      (is (not (coll-exists? db "old")))
+      (is (true? (coll-exists? db "new")))))
+
+  (testing "existing"
+    (let [db (new-db @client)
+          _ (mc/create db "old")
+          _ (mc/create db "new")]
+      (is (thrown? Exception (mc/rename db "old" "new")))
+      (mc/rename db "old" "new" {:drop-target? true})
+      (is (not (coll-exists? db "old")))
+      (is (true? (coll-exists? db "new"))))))
+
+(deftest ^:integration test-drop
+  (testing "existing"
+    (let [db (new-db @client)
+          _ (mc/create db "my-coll")
+          _ (mc/drop db "my-coll")]
+      (is (not (coll-exists? db "my-coll")))))
+
+  (testing "not existing"
+    (let [db (new-db @client)]
+      (is (nil? (mc/drop db "my-coll"))))))
+
+(deftest ^:integration test-list-indexes
+  (let [db (new-db @client)
+        _ (mc/create db "test")]
+    (is (= 1 (count (mc/list-indexes db "test"))) "has default index")))
+
+(deftest ^:integration test-create-index
+  (let [db (new-db @client)
+        _ (mc/create-index db "test" {:a 1})]
+    (is (= [{:_id 1} {:a 1}] (map :key (mc/list-indexes db "test"))))))
+
+(deftest ^:integration test-create-indexes
+  (let [db (new-db @client)
+        _ (mc/create-indexes db "test" [{:keys {:a 1}} {:keys {:b 1}}])]
+    (is (= [{:_id 1} {:a 1} {:b 1}] (map :key (mc/list-indexes db "test"))))))
