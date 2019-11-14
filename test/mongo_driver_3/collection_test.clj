@@ -228,7 +228,7 @@
               :date          (:date doc)
               :localdate     (Date/from (.toInstant (.atStartOfDay (:localdate doc) (ZoneId/of "UTC"))))
               :localdatetime (Date/from (.toInstant (.atZone (:localdatetime doc) (ZoneId/of "UTC"))))
-              :localtime     (Date/from (.toInstant (.atZone (LocalDateTime/of (LocalDate/EPOCH) (:localtime doc)) (ZoneId/of "UTC"))))} res)))))
+              :localtime     (Date/from (.toInstant (.atZone (LocalDateTime/of (LocalDate/ofEpochDay 0) (:localtime doc)) (ZoneId/of "UTC"))))} res)))))
 
 (deftest ^:integration test-insert-many
   (testing "basic insertions"
