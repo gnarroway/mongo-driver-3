@@ -1,4 +1,4 @@
-(defproject mongo-driver-3 "0.3.0-SNAPSHOT"
+(defproject mongo-driver-3 "0.3.0"
   :description "A Clojure wrapper for the Java MongoDB driver 3.11+."
   :url "https://github.com/gnarroway/mongo-driver-3"
   :license {:name         "The MIT License"

@@ -28,10 +28,10 @@ For Leinengen, add this to your project.clj:
 
 ```clojure
 ;; The underlying driver -- any newer version can also be used
-[org.mongodb/mongodb-driver-sync "3.11.0"]
+[org.mongodb/mongodb-driver-sync "3.11.2"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.2.0"]
+[mongo-driver-3 "0.3.0"]
 ```
 
 ## License
