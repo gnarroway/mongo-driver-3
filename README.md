@@ -62,7 +62,7 @@ You can also create a client and get a DB manually:
 (def client (mcl/create "mongodb://localhost:27017")) 
 
 ;; Create a db that you can pass around.
-(def db (mcl/get-db client "my-db:))
+(def db (mcl/get-db client "my-db"))
 ```
 
 ### Collection functions
@@ -100,7 +100,7 @@ As an example:
 ; => a MongoIterable
 
 ;; Find a single document or return nil
-(mc/find-one db "test' {:v "world"} {:keywordize? false})
+(mc/find-one db "test" {:v "world"} {:keywordize? false})
 ; => {"v" "world"}
 ```
 
