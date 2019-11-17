@@ -67,7 +67,7 @@ You can also create a client and get a DB manually:
 
 ### Collection functions
 
-All the collection functions closely mirror the name of the corresponding java driver 
+All the collection functions closely mirror the naming in the corresponding java driver 
 [module](https://mongodb.github.io/mongo-java-driver/3.11/javadoc/com/mongodb/client/MongoCollection.html).
 
 They always take a db as the first argument, collection name as the second,
@@ -92,11 +92,11 @@ As an example:
 ; => 1
 
 ;; Find the documents, returning a seq
-(mc/find db "test' {} {:limit 1 :projection {:_id 0}})
+(mc/find db "test" {} {:limit 1 :projection {:_id 0}})
 ; => ({:v "hello"})
 
 ;; Find the documents, returning the raw FindIterable response
-(mc/find db "test' {} {:raw? true})
+(mc/find db "test" {} {:raw? true})
 ; => a MongoIterable
 
 ;; Find a single document or return nil
