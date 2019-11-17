@@ -2,7 +2,7 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/mongo-driver-3.svg)](https://clojars.org/mongo-driver-3)
 
-[![cljdoc badge](https://cljdoc.org/badge/mongo-driver-3/mongo-driver-3)](https://cljdoc.org/d/manifold/manifold/CURRENT)
+[![cljdoc badge](https://cljdoc.org/badge/mongo-driver-3/mongo-driver-3)](https://cljdoc.org/d/mongo-driver-3/mongo-driver-3/CURRENT)
 
 
 A Mongo client for clojure, lightly wrapping 3.11+ versions of the [MongoDB Java Driver](https://mongodb.github.io/mongo-java-driver/)
