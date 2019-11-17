@@ -2,6 +2,9 @@
 
 [![Clojars Project](https://img.shields.io/clojars/v/mongo-driver-3.svg)](https://clojars.org/mongo-driver-3)
 
+[![cljdoc badge](https://cljdoc.org/badge/mongo-driver-3/mongo-driver-3)](https://cljdoc.org/d/manifold/manifold/CURRENT)
+
+
 A Mongo client for clojure, lightly wrapping 3.11+ versions of the [MongoDB Java Driver](https://mongodb.github.io/mongo-java-driver/)
 
 In general, it will feel familiar to users of mongo clients like [monger](https://github.com/michaelklishin/monger).
@@ -32,7 +35,7 @@ For Leinengen, add this to your project.clj:
 [org.mongodb/mongodb-driver-sync "3.11.2"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.3.0"]
+[mongo-driver-3 "0.3.1"]
 ```
 
 ## Getting started
