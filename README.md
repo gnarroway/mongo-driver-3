@@ -104,8 +104,9 @@ As an example:
 ; => {"v" "world"}
 ```
 
-While most options are supported directly, sometimes you may need to configure an operation directly.
-In such cases, you can pass in the java options object.
+While most options are supported directly, sometimes you may need to some extra control.
+In such cases, you can pass in a configured java options object as option. Any other
+options will be applied on top of this object.
 
 ```clojure 
 ;; These are equivalent
