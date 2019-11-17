@@ -10,11 +10,12 @@ tasks convenient, whilst still allowing the underlying client to be configured v
 
 It was developed with the following goals:
 
+- Simple
 - Up to date with the latest driver versions
-- Minimal layer that doesn't block any functionality
+- Minimal layer that does not prevent access to the underlying driver
 - Consistent API across all functions
 - Configuration over macros
-- Simple
+
 
 
 ## Status
@@ -33,6 +34,85 @@ For Leinengen, add this to your project.clj:
 ;; This wrapper library
 [mongo-driver-3 "0.3.0"]
 ```
+
+## Getting started
+
+We usually start by creating a client and connecting to a database with a connection string.
+`connect-to-db` is a convenience function that allows you to do this directly.
+
+```clojure
+(ns my.app
+  (:require [mongo-driver-3.client :as mcl]))
+
+(mcl/connect-to-db "mongodb://localhost:27017/my-db")
+; =>
+; {
+;  :client - a MongoClient instance
+;  :db - a Database that you can pass to all the collection functions
+; } 
+```
+
+You can also create a client and get a DB manually:
+
+```clojure 
+;; Calling create without an arg will try and connect to the default host/port.
+(def client (mcl/create "mongodb://localhost:27017")) 
+
+;; Create a db that you can pass around.
+(def db (mcl/get-db client "my-db:))
+```
+
+### Collection functions
+
+All the collection functions closely mirror the name of the corresponding java driver 
+[module](https://mongodb.github.io/mongo-java-driver/3.11/javadoc/com/mongodb/client/MongoCollection.html).
+
+They always take a db as the first argument, collection name as the second,
+and an optional map of options as the last. Full documentation of options can be found on 
+[cljdoc](https://cljdoc.org/d/mongo-driver-3/mongo-driver-3/CURRENT/api/mongo-driver-3.collection).
+
+As an example:
+
+```clojure 
+(ns my.app
+  (:require [mongo-driver-3.collection :as mc]))
+  
+;; Insert some documents
+(mc/insert-many db "test" [{:v "hello"} {:v "world"}])
+
+;; Count all documents
+(mc/count-documents db "test")
+; => 2
+
+;; Count with a query
+(mc/count-documents db "test" {:v "hello"})
+; => 1
+
+;; Find the documents, returning a seq
+(mc/find db "test' {} {:limit 1 :projection {:_id 0}})
+; => ({:v "hello"})
+
+;; Find the documents, returning the raw FindIterable response
+(mc/find db "test' {} {:raw? true})
+; => a MongoIterable
+
+;; Find a single document or return nil
+(mc/find-one db "test' {:v "world"} {:keywordize? false})
+; => {"v" "world"}
+```
+
+While most options are supported directly, sometimes you may need to configure an operation directly.
+In such cases, you can pass in the java options object.
+
+```clojure 
+;; These are equivalent
+(mc/rename db "test" "new-test" {:drop-target? true})
+
+(mc/rename db "test" "new-test" {:rename-collection-options (.dropTarget (RenameCollectionOptions.) true)})
+```
+
+Again, read the [docs](https://cljdoc.org/d/mongo-driver-3/mongo-driver-3/CURRENT/api/mongo-driver-3.collection)
+for full API documentation.
 
 ## License
 

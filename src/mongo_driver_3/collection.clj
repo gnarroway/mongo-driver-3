@@ -12,7 +12,7 @@
 ;;; Conversions
 
 (defprotocol ConvertToDocument
-  (^Document document [input] "Convert some clojure to a Mongo Document"))
+  (^Document document [input] "Convert from clojure to Mongo Document"))
 
 (extend-protocol ConvertToDocument
   nil
@@ -47,7 +47,7 @@
     input))
 
 (defprotocol ConvertFromDocument
-  (from-document [input keywordize?] "Converts given Document to Clojure"))
+  (from-document [input keywordize?] "Converts Mongo Document to Clojure"))
 
 (extend-protocol ConvertFromDocument
   nil
@@ -87,12 +87,7 @@
    :snapshot     (ReadConcern/SNAPSHOT)})
 
 (defn ->ReadConcern
-  "Coerce `rc` into a ReadConcern if not nil.
-
-  Accepts a ReadConcern or kw corresponding to one:
-   [:available, :default, :linearizable, :local, :majority, :snapshot]
-
-  Invalid values will throw an exception."
+  "Coerce `rc` into a ReadConcern if not nil. See `collection` for usage."
   [rc]
   (when rc
     (if (instance? ReadConcern rc)
@@ -101,12 +96,7 @@
                                        (str "No match for read concern of " (name rc))))))))
 
 (defn ->ReadPreference
-  "Coerce `rp` into a ReadPreference if not nil.
-
-  Accepts a ReadPreference or a kw corresponding to one:
-    [:primary, :primaryPreferred, :secondary, :secondaryPreferred, :nearest]
-
-  Invalid values will throw an exception."
+  "Coerce `rp` into a ReadPreference if not nil. See `collection` for usage."
   [rp]
   (when rp
     (if (instance? ReadPreference rp)
@@ -114,17 +104,7 @@
       (ReadPreference/valueOf (name rp)))))
 
 (defn ->WriteConcern
-  "Coerce write-concern related options to a WriteConcern.
-
-  Accepts an options map:
-
-    :write-concern A WriteConcern or kw corresponding to one:
-      [:acknowledged, :journaled, :majority, :unacknowledged, :w1, :w2, :w3],
-      defaulting to :acknowledged, if some invalid option is provided.
-    :write-concern/w an int >= 0, controlling the number of replicas to acknowledge
-    :write-concern/w-timeout-ms How long to wait for secondaries to acknowledge before failing,
-      in milliseconds (0 means indefinite).
-    :write-concern/journal? If true, block until write operations have been committed to the journal."
+  "Coerces write-concern related options to a WriteConcern. See `collection` for usage."
   [{:keys [write-concern write-concern/w write-concern/w-timeout-ms write-concern/journal?]}]
   (when (some some? [write-concern w w-timeout-ms journal?])
     (let [wc (when write-concern
@@ -139,20 +119,25 @@
 (defn collection
   "Coerces `coll` to a MongoCollection with some options.
 
-  `db`   is a MongoDatabase
-  `coll` is a collection name or a MongoCollection. This is to provide flexibility in the use of
-    higher-level fns (e.g. `find-maps`), either in reuse of instances or in some more complex
-    configuration we do not directly support.
+  Arguments:
 
-  Accepts an options map:
-    :read-preference
-    :read-concern
-    :write-concern
-    :write-concern/w
-    :write-concern/w-timeout-ms
-    :write-concern/journal?
-
-  See respective coercion functions for details (->ReadPreference, ->ReadConcern, ->WriteConcern)."
+  - `db`   is a MongoDatabase
+  - `coll` is a collection name or a MongoCollection. This is to provide flexibility, either in reuse of
+    instances or in some more complex configuration we do not directly support.
+  - `opts` (optional), a map of:
+    - `:read-preference` Accepts a ReadPreference or a kw corresponding to one:
+      [:primary, :primaryPreferred, :secondary, :secondaryPreferred, :nearest]
+      Invalid values will throw an exception.
+    - `:read-concern` Accepts a ReadConcern or kw corresponding to one:
+      [:available, :default, :linearizable, :local, :majority, :snapshot]
+      Invalid values will throw an exception.
+    - `:write-concern` A WriteConcern or kw corresponding to one:
+      [:acknowledged, :journaled, :majority, :unacknowledged, :w1, :w2, :w3],
+      defaulting to :acknowledged, if some invalid option is provided.
+    - `:write-concern/w` an int >= 0, controlling the number of replicas to acknowledge
+    - `:write-concern/w-timeout-ms` How long to wait for secondaries to acknowledge before failing,
+       in milliseconds (0 means indefinite).
+    - `:write-concern/journal?` If true, block until write operations have been committed to the journal."
   ([^MongoDatabase db coll]
    (collection db coll {}))
   ([^MongoDatabase db coll opts]
@@ -166,7 +151,8 @@
 ;;; CRUD functions
 
 (defn aggregate
-  "Aggregates documents according to the specified aggregation pipeline and returns an AggregateIterable.
+  "Aggregates documents according to the specified aggregation pipeline and return a seq of maps,
+  unless configured otherwise..
 
   Arguments:
 
