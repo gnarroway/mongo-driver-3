@@ -12,14 +12,14 @@
 ;;; Unit
 
 (deftest test->ReadConcern
-  (is (nil? (mc/->ReadConcern nil)))
-  (is (thrown? IllegalArgumentException (mc/->ReadConcern "invalid")))
-  (is (instance? ReadConcern (mc/->ReadConcern :available))))
+  (is (nil? (mc/->ReadConcern {})))
+  (is (thrown? IllegalArgumentException (mc/->ReadConcern {:read-concern "invalid"})))
+  (is (instance? ReadConcern (mc/->ReadConcern {:read-concern :available}))))
 
 (deftest test->ReadPreference
-  (is (nil? (mc/->ReadPreference nil)))
-  (is (thrown? IllegalArgumentException (mc/->ReadPreference "invalid")))
-  (is (instance? ReadPreference (mc/->ReadPreference :primary))))
+  (is (nil? (mc/->ReadPreference {})))
+  (is (thrown? IllegalArgumentException (mc/->ReadPreference {:read-preference "invalid"})))
+  (is (instance? ReadPreference (mc/->ReadPreference {:read-preference :primary}))))
 
 (deftest test->WriteConcern
   (is (= (WriteConcern/W1) (mc/->WriteConcern {:write-concern :w1})) "accepts kw")

@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [find empty? drop])
   (:import (clojure.lang Ratio Keyword Named IPersistentMap)
            (com.mongodb ReadConcern ReadPreference WriteConcern MongoNamespace)
-           (com.mongodb.client MongoDatabase MongoCollection TransactionBody)
+           (com.mongodb.client MongoDatabase MongoCollection TransactionBody ClientSession)
            (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions CreateCollectionOptions RenameCollectionOptions IndexOptions IndexModel UpdateOptions ReplaceOptions)
            (java.util List Collection)
            (java.util.concurrent TimeUnit)
@@ -88,35 +88,35 @@
 
 (defn ->ReadConcern
   "Coerce `rc` into a ReadConcern if not nil. See `collection` for usage."
-  [rc]
-  (when rc
-    (if (instance? ReadConcern rc)
-      rc
-      (or (kw->ReadConcern rc) (throw (IllegalArgumentException.
-                                       (str "No match for read concern of " (name rc))))))))
+  [{:keys [read-concern]}]
+  (when read-concern
+    (if (instance? ReadConcern read-concern)
+      read-concern
+      (or (kw->ReadConcern read-concern) (throw (IllegalArgumentException.
+                                                 (str "No match for read concern of " (name read-concern))))))))
 
 (defn ->ReadPreference
   "Coerce `rp` into a ReadPreference if not nil. See `collection` for usage."
-  [rp]
-  (when rp
-    (if (instance? ReadPreference rp)
-      rp
-      (ReadPreference/valueOf (name rp)))))
+  [{:keys [read-preference]}]
+  (when read-preference
+    (if (instance? ReadPreference read-preference)
+      read-preference
+      (ReadPreference/valueOf (name read-preference)))))
 
-(defn ->WriteConcern
+(defn ^WriteConcern ->WriteConcern
   "Coerces write-concern related options to a WriteConcern. See `collection` for usage."
-  [{:keys [write-concern write-concern/w write-concern/w-timeout-ms write-concern/journal?]}]
+  [{:keys [write-concern ^Integer write-concern/w ^Long write-concern/w-timeout-ms ^Boolean write-concern/journal?]}]
   (when (some some? [write-concern w w-timeout-ms journal?])
-    (let [wc (when write-concern
-               (if (instance? WriteConcern write-concern)
-                 write-concern
-                 (WriteConcern/valueOf (name write-concern))))]
-      (-> (or wc (WriteConcern/ACKNOWLEDGED))
-          (#(if w (.withW % w) %))
-          (#(if w-timeout-ms (.withWTimeout % w-timeout-ms (TimeUnit/MILLISECONDS)) %))
-          (#(if (some? journal?) (.withJournal % journal?) %))))))
+    (let [^WriteConcern wc (when write-concern
+                             (if (instance? WriteConcern write-concern)
+                               write-concern
+                               (WriteConcern/valueOf (name write-concern))))]
+      (cond-> (or wc (WriteConcern/ACKNOWLEDGED))
+        w (.withW w)
+        w-timeout-ms (.withWTimeout w-timeout-ms (TimeUnit/MILLISECONDS))
+        (some? journal?) (.withJournal journal?)))))
 
-(defn collection
+(defn ^MongoCollection collection
   "Coerces `coll` to a MongoCollection with some options.
 
   Arguments:
@@ -141,12 +141,14 @@
   ([^MongoDatabase db coll]
    (collection db coll {}))
   ([^MongoDatabase db coll opts]
-   (let [coll' (if (instance? MongoCollection coll) coll (.getCollection db coll))
-         {:keys [read-concern read-preference]} opts]
-     (-> coll'
-         (#(if-let [rp (->ReadPreference read-preference)] (.withReadPreference % rp) %))
-         (#(if-let [rc (->ReadConcern read-concern)] (.withReadConcern % rc) %))
-         (#(if-let [wc (->WriteConcern opts)] (.withWriteConcern % wc) %))))))
+   (let [^MongoCollection coll' (if (instance? MongoCollection coll) coll (.getCollection db coll))
+         rp (->ReadPreference opts)
+         rc (->ReadConcern opts)
+         wc (->WriteConcern opts)]
+     (cond-> ^MongoCollection coll'
+       rp (.withReadPreference rp)
+       rc (.withReadConcern rc)
+       wc (.withWriteConcern wc)))))
 
 ;;; CRUD functions
 
@@ -169,28 +171,27 @@
   ([^MongoDatabase db coll pipeline]
    (aggregate db coll pipeline {}))
   ([^MongoDatabase db coll pipeline opts]
-   (let [{:keys [session allow-disk-use? batch-size bypass-document-validation? keywordize? raw?] :or {keywordize? true raw? false}} opts
-         it (-> (if session
-                  (.aggregate (collection db coll opts) session (document pipeline))
-                  (.aggregate (collection db coll opts) (document pipeline)))
-                (#(if (some? allow-disk-use?) (.allowDiskUse % allow-disk-use?) %))
-                (#(if batch-size (.batchSize % batch-size) %))
-                (#(if (some? bypass-document-validation?) (.bypassDocumentValidation % bypass-document-validation?) %)))]
+   (let [{:keys [^ClientSession session allow-disk-use? ^Integer batch-size bypass-document-validation? keywordize? raw?] :or {keywordize? true raw? false}} opts
+         it (cond-> (if session
+                      (.aggregate (collection db coll opts) session ^List (map document pipeline))
+                      (.aggregate (collection db coll opts) ^List (map document pipeline)))
+              (some? allow-disk-use?) (.allowDiskUse allow-disk-use?)
+              (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+              batch-size (.batchSize batch-size))]
 
      (if-not raw?
        (map (fn [x] (from-document x keywordize?)) (seq it))
        it))))
 
-(defn ->CountOptions
+(defn ^CountOptions ->CountOptions
   "Coerce options map into CountOptions. See `count-documents` for usage."
   [{:keys [count-options hint limit max-time-ms skip]}]
-  (let [opts (or count-options (CountOptions.))]
-    (when hint (.hint opts (document hint)))
-    (when limit (.limit opts limit))
-    (when max-time-ms (.maxTime opts max-time-ms (TimeUnit/MILLISECONDS)))
-    (when skip (.skip opts skip))
-
-    opts))
+  (let [^CountOptions opts (or count-options (CountOptions.))]
+    (cond-> opts
+      hint (.hint (document hint))
+      limit (.limit limit)
+      max-time-ms (.maxTime max-time-ms (TimeUnit/MILLISECONDS))
+      skip (.skip skip))))
 
 (defn count-documents
   "Count documents in a collection, optionally matching a filter query `q`.
@@ -220,10 +221,10 @@
        (.countDocuments (collection db coll opts) session (document q) opts')
        (.countDocuments (collection db coll opts) (document q) opts')))))
 
-(defn ->DeleteOptions
+(defn ^DeleteOptions ->DeleteOptions
   "Coerce options map into DeleteOptions. See `delete-one` and `delete-many` for usage."
   [{:keys [delete-options]}]
-  (let [opts (or delete-options (DeleteOptions.))]
+  (let [^DeleteOptions opts (or delete-options (DeleteOptions.))]
     opts))
 
 (defn delete-one
@@ -287,14 +288,14 @@
   ([^MongoDatabase db coll q]
    (find db coll q {}))
   ([^MongoDatabase db coll q opts]
-   (let [{:keys [limit skip sort projection session keywordize? raw?] :or {keywordize? true raw? false}} opts]
-     (let [it (-> (if session
-                    (.find (collection db coll opts) session (document q))
-                    (.find (collection db coll opts) (document q)))
-                  (#(if limit (.limit % limit) %))
-                  (#(if skip (.skip % skip) %))
-                  (#(if sort (.sort % (document sort)) %))
-                  (#(if projection (.projection % (document projection)) %)))]
+   (let [{:keys [limit skip sort projection ^ClientSession session keywordize? raw?] :or {keywordize? true raw? false}} opts]
+     (let [it (cond-> (if session
+                        (.find (collection db coll opts) session (document q))
+                        (.find (collection db coll opts) (document q)))
+                limit (.limit limit)
+                skip (.skip skip)
+                sort (.sort (document sort))
+                projection (.projection (document projection)))]
 
        (if-not raw?
          (map (fn [x] (from-document x keywordize?)) (seq it))
@@ -309,16 +310,15 @@
   ([^MongoDatabase db coll q opts]
    (first (find db coll q (assoc opts :limit 1 :raw? false)))))
 
-(defn ->FindOneAndUpdateOptions
+(defn ^FindOneAndUpdateOptions ->FindOneAndUpdateOptions
   "Coerce options map into FindOneAndUpdateOptions. See `find-one-and-update` for usage."
   [{:keys [find-one-and-update-options upsert? return-new? sort projection]}]
-  (let [opts (or find-one-and-update-options (FindOneAndUpdateOptions.))]
-    (when (some? upsert?) (.upsert opts upsert?))
-    (when return-new? (.returnDocument opts (ReturnDocument/AFTER)))
-    (when sort (.sort opts (document sort)))
-    (when projection (.projection opts (document projection)))
-
-    opts))
+  (let [^FindOneAndUpdateOptions opts (or find-one-and-update-options (FindOneAndUpdateOptions.))]
+    (cond-> opts
+      (some? upsert?) (.upsert upsert?)
+      return-new? (.returnDocument (ReturnDocument/AFTER))
+      sort (.sort (document sort))
+      projection (.projection (document projection)))))
 
 (defn find-one-and-update
   "Atomically find a document (at most one) and modify it.
@@ -343,23 +343,22 @@
   ([^MongoDatabase db coll q update]
    (find-one-and-update db coll q update {}))
   ([^MongoDatabase db coll q update opts]
-   (let [{:keys [keywordize? session] :or {keywordize? true}} opts
+   (let [{:keys [keywordize? ^ClientSession session] :or {keywordize? true}} opts
          opts' (->FindOneAndUpdateOptions opts)]
      (-> (if session
            (.findOneAndUpdate (collection db coll opts) session (document q) (document update) opts')
            (.findOneAndUpdate (collection db coll opts) (document q) (document update) opts'))
          (from-document keywordize?)))))
 
-(defn ->FindOneAndReplaceOptions
+(defn ^FindOneAndReplaceOptions ->FindOneAndReplaceOptions
   "Coerce options map into FindOneAndReplaceOptions. See `find-one-and-replace` for usage."
   [{:keys [find-one-and-replace-options upsert? return-new? sort projection]}]
-  (let [opts (or find-one-and-replace-options (FindOneAndReplaceOptions.))]
-    (when (some? upsert?) (.upsert opts upsert?))
-    (when return-new? (.returnDocument opts (ReturnDocument/AFTER)))
-    (when sort (.sort opts (document sort)))
-    (when projection (.projection opts (document projection)))
-
-    opts))
+  (let [^FindOneAndReplaceOptions opts (or find-one-and-replace-options (FindOneAndReplaceOptions.))]
+    (cond-> opts
+      (some? upsert?) (.upsert upsert?)
+      return-new? (.returnDocument (ReturnDocument/AFTER))
+      sort (.sort (document sort))
+      projection (.projection (document projection)))))
 
 (defn find-one-and-replace
   "Atomically find a document (at most one) and replace it.
@@ -391,10 +390,10 @@
            (.findOneAndReplace (collection db coll opts) (document q) (document doc) opts'))
          (from-document keywordize?)))))
 
-(defn ->InsertOneOptions
+(defn ^InsertOneOptions ->InsertOneOptions
   "Coerce options map into InsertOneOptions. See `insert-one` for usage."
   [{:keys [insert-one-options bypass-document-validation?]}]
-  (let [opts (or insert-one-options (InsertOneOptions.))]
+  (let [^InsertOneOptions opts (or insert-one-options (InsertOneOptions.))]
     (when (some? bypass-document-validation?) (.bypassDocumentValidation opts bypass-document-validation?))
 
     opts))
@@ -423,14 +422,13 @@
        (.insertOne (collection db coll opts) session (document doc) opts')
        (.insertOne (collection db coll opts) (document doc) opts')))))
 
-(defn ->InsertManyOptions
+(defn ^InsertManyOptions ->InsertManyOptions
   "Coerce options map into InsertManyOptions. See `insert-many` for usage."
   [{:keys [insert-many-options bypass-document-validation? ordered?]}]
-  (let [opts (or insert-many-options (InsertManyOptions.))]
-    (when (some? bypass-document-validation?) (.bypassDocumentValidation opts bypass-document-validation?))
-    (when (some? ordered?) (.ordered opts ordered?))
-
-    opts))
+  (let [^InsertManyOptions opts (or insert-many-options (InsertManyOptions.))]
+    (cond-> opts
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+      (some? ordered?) (.ordered ordered?))))
 
 (defn insert-many
   "Inserts multiple documents into a collection.
@@ -453,18 +451,17 @@
    (insert-many db coll docs {}))
   ([^MongoDatabase db coll docs opts]
    (let [opts' (->InsertManyOptions opts)]
-     (if-let [session (:session opts)]
-       (.insertMany (collection db coll opts) session (map document docs) opts')
-       (.insertMany (collection db coll opts) (map document docs) opts')))))
+     (if-let [^ClientSession session (:session opts)]
+       (.insertMany (collection db coll opts) session ^List (map document docs) opts')
+       (.insertMany (collection db coll opts) ^List (map document docs) opts')))))
 
-(defn ->ReplaceOptions
+(defn ^ReplaceOptions ->ReplaceOptions
   "Coerce options map into ReplaceOptions. See `replace-one` and `replace-many` for usage."
   [{:keys [replace-options upsert? bypass-document-validation?]}]
-  (let [opts (or replace-options (ReplaceOptions.))]
-    (when (some? upsert?) (.upsert opts upsert?))
-    (when (some? bypass-document-validation?) (.bypassDocumentValidation opts bypass-document-validation?))
-
-    opts))
+  (let [^ReplaceOptions opts (or replace-options (ReplaceOptions.))]
+    (cond-> opts
+      (some? upsert?) (.upsert upsert?)
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
 
 (defn replace-one
   "Replace a single document in a collection and returns an UpdateResult.
@@ -486,18 +483,17 @@
   ([^MongoDatabase db coll q doc]
    (find-one-and-replace db coll q doc {}))
   ([^MongoDatabase db coll q doc opts]
-   (if-let [session (:session opts)]
+   (if-let [^ClientSession session (:session opts)]
      (.replaceOne (collection db coll opts) session (document q) (document doc) (->ReplaceOptions opts))
      (.replaceOne (collection db coll opts) (document q) (document doc) (->ReplaceOptions opts)))))
 
-(defn ->UpdateOptions
+(defn ^UpdateOptions ->UpdateOptions
   "Coerce options map into UpdateOptions. See `update-one` and `update-many` for usage."
   [{:keys [update-options upsert? bypass-document-validation?]}]
-  (let [opts (or update-options (UpdateOptions.))]
-    (when (some? upsert?) (.upsert opts upsert?))
-    (when (some? bypass-document-validation?) (.bypassDocumentValidation opts bypass-document-validation?))
-
-    opts))
+  (let [^UpdateOptions opts (or update-options (UpdateOptions.))]
+    (cond-> opts
+      (some? upsert?) (.upsert upsert?)
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
 
 (defn update-one
   "Updates a single document in a collection and returns an UpdateResult.
@@ -519,7 +515,7 @@
   ([^MongoDatabase db coll q update]
    (update-one db coll q update {}))
   ([^MongoDatabase db coll q update opts]
-   (if-let [session (:session opts)]
+   (if-let [^ClientSession session (:session opts)]
      (.updateOne (collection db coll opts) session (document q) (document update) (->UpdateOptions opts))
      (.updateOne (collection db coll opts) (document q) (document update) (->UpdateOptions opts)))))
 
@@ -541,23 +537,22 @@
 
   Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q update]
-   (update-many db coll q {}))
+   (update-many db coll q update {}))
   ([^MongoDatabase db coll q update opts]
-   (if-let [session (:session opts)]
+   (if-let [^ClientSession session (:session opts)]
      (.updateMany (collection db coll opts) session (document q) (document update) (->UpdateOptions opts))
      (.updateMany (collection db coll opts) (document q) (document update) (->UpdateOptions opts)))))
 
 ;;; Admin functions
 
-(defn ->CreateCollectionOptions
+(defn ^CreateCollectionOptions ->CreateCollectionOptions
   "Coerce options map into CreateCollectionOptions. See `create` usage."
   [{:keys [create-collection-options capped? max-documents max-size-bytes]}]
-  (let [opts (or create-collection-options (CreateCollectionOptions.))]
-    (when (some? capped?) (.capped opts capped?))
-    (when max-documents (.maxDocuments opts max-documents))
-    (when max-size-bytes (.sizeInBytes opts max-size-bytes))
-
-    opts))
+  (let [^CreateCollectionOptions opts (or create-collection-options (CreateCollectionOptions.))]
+    (cond-> opts
+      (some? capped?) (.capped capped?)
+      max-documents (.maxDocuments max-documents)
+      max-size-bytes (.sizeInBytes max-size-bytes))))
 
 (defn create
   "Creates a collection
@@ -572,19 +567,18 @@
     - `:max-size-bytes` max collection size in bytes for a capped collection
     - `:create-collection-options` A CreateCollectionOptions for configuring directly. If specified,
     any other [preceding] query options will be applied to it"
-  ([^MongoDatabase db coll]
+  ([^MongoDatabase db ^String coll]
    (create db coll {}))
-  ([^MongoDatabase db coll opts]
+  ([^MongoDatabase db ^String coll opts]
    (let [opts' (->CreateCollectionOptions opts)]
      (.createCollection db coll opts'))))
 
-(defn ->RenameCollectionOptions
+(defn ^RenameCollectionOptions ->RenameCollectionOptions
   "Coerce options map into RenameCollectionOptions. See `rename` usage."
   [{:keys [rename-collection-options drop-target?]}]
-  (let [opts (or rename-collection-options (RenameCollectionOptions.))]
-    (when (some? drop-target?) (.dropTarget opts drop-target?))
-
-    opts))
+  (let [^RenameCollectionOptions opts (or rename-collection-options (RenameCollectionOptions.))]
+    (cond-> opts
+      (some? drop-target?) (.dropTarget drop-target?))))
 
 (defn rename
   "Renames `coll` to `new-coll` in the same DB.
@@ -612,17 +606,16 @@
   [^MongoDatabase db coll]
   (.drop (collection db coll)))
 
-(defn ->IndexOptions
+(defn ^IndexOptions ->IndexOptions
   "Coerces an options map into an IndexOptions.
 
   See `create-index` for usage"
   [{:keys [index-options name sparse? unique?]}]
-  (let [opts (or index-options (IndexOptions.))]
-    (when name (.name opts name))
-    (when (some? sparse?) (.sparse opts sparse?))
-    (when (some? unique?) (.unique opts unique?))
-
-    opts))
+  (let [^IndexOptions opts (or index-options (IndexOptions.))]
+    (cond-> opts
+      name (.name name)
+      (some? sparse?) (.sparse sparse?)
+      (some? unique?) (.unique unique?))))
 
 (defn create-index
   "Creates an index
@@ -679,11 +672,11 @@
   Ensure `session` is passed as an option to each operation.
 
   e.g.
-  (def s (.startSession conn))
+  (def s (start-session client))
   (with-transaction s
     (fn []
       (insert-one my-db \"coll\" {:name \"hello\"} {:session s})
       (insert-one my-db \"coll\" {:name \"world\"} {:session s})))"
-  [session body]
+  [^ClientSession session body]
   (.withTransaction session (reify TransactionBody
                               (execute [_] body))))

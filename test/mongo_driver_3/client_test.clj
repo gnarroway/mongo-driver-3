@@ -2,7 +2,7 @@
   (:require [clojure.test :refer :all]
             [mongo-driver-3.client :as mg]
             [mongo-driver-3.collection :as mc])
-  (:import (com.mongodb.client MongoClient MongoDatabase MongoIterable ListCollectionsIterable ClientSession)
+  (:import (com.mongodb.client MongoClient MongoDatabase MongoIterable ListCollectionsIterable)
            (java.util UUID)
            (com.mongodb ClientSessionOptions ReadConcern ReadPreference)
            (java.util.concurrent TimeUnit)))
@@ -55,18 +55,18 @@
   [client]
   (mg/get-db client (.toString (UUID/randomUUID))))
 
-(deftest ^:integration test-collection-names
+(deftest ^:integration  test-list-collections
   (let [db (new-db @client)
         _ (mc/create db "test")]
-    (is (= ["test"] (mg/collection-names db)))
-    (is (instance? MongoIterable (mg/collection-names db {:raw? true})))))
+    (is (= ["test"] (map :name (mg/list-collections db))))
+    (is (= ["test"] (map #(get % "name") (mg/list-collections db {:keywordize? false}))))
+    (is (instance? ListCollectionsIterable (mg/list-collections db {:raw? true})))))
 
-(deftest ^:integration  test-collections
+(deftest ^:integration test-list-collection-names
   (let [db (new-db @client)
         _ (mc/create db "test")]
-    (is (= ["test"] (map :name (mg/collections db))))
-    (is (= ["test"] (map #(get % "name") (mg/collections db {:keywordize? false}))))
-    (is (instance? ListCollectionsIterable (mg/collections db {:raw? true})))))
+    (is (= ["test"] (mg/list-collection-names db)))
+    (is (instance? MongoIterable (mg/list-collection-names db {:raw? true})))))
 
 #_(deftest ^:integration test-start-session
-  (is (instance? ClientSession (mg/start-session @client))))
+    (is (instance? ClientSession (mg/start-session @client))))

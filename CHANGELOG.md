@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file. This change
 ### Added
 - list collections
 - start session
+- remove reflection warnings
 
 ## [0.3.1]
 ### Added
