@@ -1,21 +1,77 @@
 (ns mongo-driver-3.client-test
   (:require [clojure.test :refer :all]
-            [mongo-driver-3.client :as mg])
-  (:import (com.mongodb.client MongoClient MongoDatabase)))
+            [mongo-driver-3.client :as mg]
+            [mongo-driver-3.collection :as mc])
+  (:import (com.mongodb.client MongoClient MongoDatabase MongoIterable ListCollectionsIterable ClientSession)
+           (java.util UUID)
+           (com.mongodb ClientSessionOptions ReadConcern ReadPreference)
+           (java.util.concurrent TimeUnit)))
+
+;;; Unit
+
+(deftest test->ClientSessionOptions
+  (is (instance? ClientSessionOptions (mg/->ClientSessionOptions {})))
+  (are [expected arg]
+       (= expected (.isCausallyConsistent (mg/->ClientSessionOptions {:causally-consistent? arg})))
+    true true
+    false false
+    nil nil)
+  (is (= 7 (.getMaxCommitTime (.getDefaultTransactionOptions
+                               (mg/->ClientSessionOptions {:max-commit-time-ms 7})) (TimeUnit/MILLISECONDS))))
+  (is (= (ReadConcern/AVAILABLE) (.getReadConcern (.getDefaultTransactionOptions
+                                                   (mg/->ClientSessionOptions {:read-concern :available})))))
+  (is (= (ReadPreference/primary) (.getReadPreference (.getDefaultTransactionOptions (mg/->ClientSessionOptions {:read-preference :primary})))))
+  (is (nil? (.getWriteConcern (.getDefaultTransactionOptions (mg/->ClientSessionOptions {})))))
+  (is (= 1 (.getW (.getWriteConcern (.getDefaultTransactionOptions (mg/->ClientSessionOptions {:write-concern/w 1}))))))
+  (let [opts (.build (.causallyConsistent (ClientSessionOptions/builder) true))]
+    (is (= opts (mg/->ClientSessionOptions {:client-session-options opts})) "configure directly")))
 
 ;;; Integration
 
-; docker run -it --rm -p 27017:27017 mongo:4.2
+; docker run -it --rm -p 27017:27017 mongo:4.2 --replset rs1
 
-(def mongo-host (or (System/getenv "MONGO_HOST") "mongodb://localhost:27017"))
+(def mongo-host "mongodb://localhost:27017")
 
-(deftest test-create
+(deftest ^:integration test-create
   (is (instance? MongoClient (mg/create)))
   (is (instance? MongoClient (mg/create mongo-host))))
 
-(deftest test-connect-to-db
+(deftest ^:integration test-connect-to-db
   (is (thrown? IllegalArgumentException (mg/connect-to-db mongo-host)))
   (let [res (mg/connect-to-db (str mongo-host "/my-db"))]
     (is (instance? MongoClient (:client res)))
     (is (instance? MongoDatabase (:db res)))
     (is (= "my-db" (.getName (:db res))))))
+
+(def client (atom nil))
+
+(defn- setup-connections [f]
+  (reset! client (mg/create mongo-host))
+  ;; Ensure we have a replica set so we can run session tests
+  (let [admin-db (mg/get-db @client "admin")]
+    (try (.runCommand admin-db (mc/document {:replSetInitiate {}}))
+         (catch Exception _ "already initialized")))
+  (f)
+  (mg/close @client))
+
+(use-fixtures :once setup-connections)
+
+(defn new-db
+  [client]
+  (mg/get-db client (.toString (UUID/randomUUID))))
+
+(deftest ^:integration test-collection-names
+  (let [db (new-db @client)
+        _ (mc/create db "test")]
+    (is (= ["test"] (mg/collection-names db)))
+    (is (instance? MongoIterable (mg/collection-names db {:raw? true})))))
+
+(deftest ^:integration  test-collections
+  (let [db (new-db @client)
+        _ (mc/create db "test")]
+    (is (= ["test"] (map :name (mg/collections db))))
+    (is (= ["test"] (map #(get % "name") (mg/collections db {:keywordize? false}))))
+    (is (instance? ListCollectionsIterable (mg/collections db {:raw? true})))))
+
+(deftest ^:integration test-start-session
+  (is (instance? ClientSession (mg/start-session @client))))

@@ -40,13 +40,15 @@ For Leinengen, add this to your project.clj:
 
 ## Getting started
 
+```clojure
+(ns my.app
+  (:require [mongo-driver-3.client :as mcl]))
+```
+
 We usually start by creating a client and connecting to a database with a connection string.
 `connect-to-db` is a convenience function that allows you to do this directly.
 
 ```clojure
-(ns my.app
-  (:require [mongo-driver-3.client :as mcl]))
-
 (mcl/connect-to-db "mongodb://localhost:27017/my-db")
 ; =>
 ; {
@@ -55,7 +57,7 @@ We usually start by creating a client and connecting to a database with a connec
 ; } 
 ```
 
-You can also create a client and get a DB manually:
+You can also create a client and get a DB separately:
 
 ```clojure 
 ;; Calling create without an arg will try and connect to the default host/port.
@@ -105,7 +107,7 @@ As an example:
 ```
 
 While most options are supported directly, sometimes you may need to some extra control.
-In such cases, you can pass in a configured java options object as option. Any other
+In such cases, you can pass in a configured java options object. Any other
 options will be applied on top of this object.
 
 ```clojure 
