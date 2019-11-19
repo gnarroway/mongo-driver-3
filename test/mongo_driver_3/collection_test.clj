@@ -184,7 +184,7 @@
 
 ;;; Integration
 
-; docker run -it --rm -p 27017:27017 mongo:4.2 --replset rs1
+; docker run -it --rm -p 27017:27017 mongo:4.2
 
 (def client (atom nil))
 

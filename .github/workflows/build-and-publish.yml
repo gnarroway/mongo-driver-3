@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: lein deps
     - name: Start mongo
-      run:  sudo docker run --rm -d -p 27017:27017 mongo --replSet rs1
+      run:  sudo docker run --rm -d -p 27017:27017 mongo
     - name: Run tests
       run: lein test
     - name: Publish

@@ -28,8 +28,7 @@
 
 ;;; Integration
 
-; docker run -it --rm -p 27017:27017 mongo:4.2 --replset rs1
-
+; docker run -it --rm -p 27017:27017 mongo:4.2
 (def mongo-host "mongodb://localhost:27017")
 
 (deftest ^:integration test-create
@@ -46,11 +45,7 @@
 (def client (atom nil))
 
 (defn- setup-connections [f]
-  (reset! client (mg/create mongo-host))
-  ;; Ensure we have a replica set so we can run session tests
-  (let [admin-db (mg/get-db @client "admin")]
-    (try (.runCommand admin-db (mc/document {:replSetInitiate {}}))
-         (catch Exception _ "already initialized")))
+  (reset! client (mg/create))
   (f)
   (mg/close @client))
 
@@ -73,5 +68,5 @@
     (is (= ["test"] (map #(get % "name") (mg/collections db {:keywordize? false}))))
     (is (instance? ListCollectionsIterable (mg/collections db {:raw? true})))))
 
-(deftest ^:integration test-start-session
+#_(deftest ^:integration test-start-session
   (is (instance? ClientSession (mg/start-session @client))))
