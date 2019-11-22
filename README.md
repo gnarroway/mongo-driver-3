@@ -120,6 +120,21 @@ options will be applied on top of this object.
 Again, read the [docs](https://cljdoc.org/d/mongo-driver-3/mongo-driver-3/CURRENT/api/mongo-driver-3.collection)
 for full API documentation.
 
+### Using operators
+
+Many mongo queries take operators like `$eq` and `$gt`. These are exposed in the `mongo-driver-3.operator` namespace.
+
+``` clojure
+(ns my.app
+  (:require [mongo-driver-3.collection :as mc]
+            [mongo-driver-3.operator :refer [$gt]))
+  
+(mc/find db "test" {:a {$gt 3}})
+
+;; This is equivalent to, but with less chance of error than:
+(mc/find db "test" {:a {:$gt 3}})
+```
+
 ## License
 
 Released under the MIT License: http://www.opensource.org/licenses/mit-license.php
