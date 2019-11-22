@@ -2,12 +2,14 @@
   (:refer-clojure :exclude [find empty? drop])
   (:import (clojure.lang Ratio Keyword Named IPersistentMap)
            (com.mongodb ReadConcern ReadPreference WriteConcern MongoNamespace)
-           (com.mongodb.client MongoDatabase MongoCollection TransactionBody ClientSession)
+           (com.mongodb.client MongoDatabase MongoCollection ClientSession)
            (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions CreateCollectionOptions RenameCollectionOptions IndexOptions IndexModel UpdateOptions ReplaceOptions)
            (java.util List Collection)
            (java.util.concurrent TimeUnit)
            (org.bson Document)
            (org.bson.types Decimal128)))
+
+(set! *warn-on-reflection* true)
 
 ;;; Conversions
 
@@ -662,21 +664,3 @@
   ([^MongoDatabase db coll opts]
    (->> (.listIndexes (collection db coll opts))
         (map #(from-document % true)))))
-
-;;; Utility functions
-
-(defn- with-transaction
-  "Executes `body` in a transaction.
-
-  `body` should be a fn with one or more mongo operations in it.
-  Ensure `session` is passed as an option to each operation.
-
-  e.g.
-  (def s (start-session client))
-  (with-transaction s
-    (fn []
-      (insert-one my-db \"coll\" {:name \"hello\"} {:session s})
-      (insert-one my-db \"coll\" {:name \"world\"} {:session s})))"
-  [^ClientSession session body]
-  (.withTransaction session (reify TransactionBody
-                              (execute [_] body))))

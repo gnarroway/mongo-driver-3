@@ -23,7 +23,7 @@ It was developed with the following goals:
 
 ## Status
 
-mongo-driver-3 is under active development and the API may change.
+mongo-driver-3 is used in production, but is also under development and the API may change slightly.
 Please try it out and raise any issues you may find.
 
 ## Usage
@@ -124,7 +124,7 @@ for full API documentation.
 
 Many mongo queries take operators like `$eq` and `$gt`. These are exposed in the `mongo-driver-3.operator` namespace.
 
-``` clojure
+```clojure
 (ns my.app
   (:require [mongo-driver-3.collection :as mc]
             [mongo-driver-3.operator :refer [$gt]))
@@ -133,6 +133,23 @@ Many mongo queries take operators like `$eq` and `$gt`. These are exposed in the
 
 ;; This is equivalent to, but with less chance of error than:
 (mc/find db "test" {:a {"$gt" 3}})
+```
+
+### Using transactions
+
+You can create a session to perform multi-document transactions, where all operations either
+succeed or none are persisted. 
+
+It is important to
+use `with-open` so the session is closed after both successful and failed transactions.
+
+```clojure
+;; Inserts 2 documents into a collection
+(with-open [s (mg/start-session client)]
+  (mg/with-transaction s
+    (fn []
+      (mc/insert-one my-db "coll" {:name "hello"} {:session s})
+      (mc/insert-one my-db "coll" {:name "world"} {:session s}))))
 ```
 
 ## License

@@ -1,9 +1,11 @@
 (ns mongo-driver-3.client
   (:refer-clojure :exclude [find])
   (:require [mongo-driver-3.collection :as mc])
-  (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase)
+  (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase TransactionBody)
            (com.mongodb ConnectionString ClientSessionOptions TransactionOptions)
            (java.util.concurrent TimeUnit)))
+
+(set! *warn-on-reflection* true)
 
 ;;; Core
 
@@ -75,13 +77,12 @@
         rc (mc/->ReadConcern opts)
         wc (mc/->WriteConcern opts)]
 
-    (when (some some? [max-commit-time-ms rp rc wc])
-      (cond-> (TransactionOptions/builder)
-        max-commit-time-ms (.maxCommitTime max-commit-time-ms (TimeUnit/MILLISECONDS))
-        rp (.readPreference rp)
-        rc (.readConcern rc)
-        wc (.writeConcern wc)
-        true (.build)))))
+    (cond-> (TransactionOptions/builder)
+      max-commit-time-ms (.maxCommitTime max-commit-time-ms (TimeUnit/MILLISECONDS))
+      rp (.readPreference rp)
+      rc (.readConcern rc)
+      wc (.writeConcern wc)
+      true (.build))))
 
 (defn ->ClientSessionOptions
   "Coerces an options map into a ClientSessionOptions See `start-session` for usage.
@@ -121,6 +122,25 @@
   ([^MongoClient client] (start-session client {}))
   ([^MongoClient client opts]
    (.startSession client (->ClientSessionOptions opts))))
+
+(defn with-transaction
+  "Executes `body` in a transaction.
+
+  `body` should be a fn with one or more mongo operations in it.
+  Ensure `session` is passed as an option to each operation.
+
+  e.g.
+  (with-open [s (start-session client)]
+    (with-transaction s
+      (fn []
+        (insert-one my-db \"coll\" {:name \"hello\"} {:session s})
+        (insert-one my-db \"coll\" {:name \"world\"} {:session s}))))"
+  ([^ClientSession session body] (with-transaction session body {}))
+  ([^ClientSession session body opts]
+   (.withTransaction session
+                     (reify TransactionBody
+                       (execute [_] (body)))
+                     (->TransactionOptions opts))))
 
 ;;; Utility
 
