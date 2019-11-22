@@ -132,7 +132,7 @@ Many mongo queries take operators like `$eq` and `$gt`. These are exposed in the
 (mc/find db "test" {:a {$gt 3}})
 
 ;; This is equivalent to, but with less chance of error than:
-(mc/find db "test" {:a {:$gt 3}})
+(mc/find db "test" {:a {"$gt" 3}})
 ```
 
 ## License
