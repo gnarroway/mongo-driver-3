@@ -35,7 +35,7 @@ For Leinengen, add this to your project.clj:
 [org.mongodb/mongodb-driver-sync "3.11.2"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.4.0"]
+[mongo-driver-3 "0.5.0"]
 ```
 
 ## Getting started

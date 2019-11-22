@@ -1,4 +1,4 @@
-(defproject mongo-driver-3 "0.5.0-SNAPSHOT"
+(defproject mongo-driver-3 "0.5.0"
   :description "A Clojure wrapper for the Java MongoDB driver 3.11+."
   :url "https://github.com/gnarroway/mongo-driver-3"
   :license {:name         "The MIT License"
@@ -11,4 +11,4 @@
   :plugins [[lein-cljfmt "0.6.4"]]
 
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.10.1"]
-                                  [org.mongodb/mongodb-driver-sync "3.11.0"]]}})
+                                  [org.mongodb/mongodb-driver-sync "3.11.2"]]}})
