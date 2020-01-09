@@ -1,6 +1,6 @@
 (ns mongo-driver-3.client
   (:refer-clojure :exclude [find])
-  (:require [mongo-driver-3.collection :as mc])
+  (:require [mongo-driver-3.model :as m])
   (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase TransactionBody)
            (com.mongodb ConnectionString ClientSessionOptions TransactionOptions)
            (java.util.concurrent TimeUnit)))
@@ -49,7 +49,7 @@
               (.listCollections db session)
               (.listCollections db))]
      (if-not raw?
-       (map #(mc/from-document % keywordize?) (seq it))
+       (map #(m/from-document % keywordize?) (seq it))
        it))))
 
 (defn list-collection-names
@@ -73,9 +73,9 @@
 (defn ->TransactionOptions
   "Coerces options map into a TransactionOptions. See `start-session` for usage."
   [{:keys [max-commit-time-ms] :as opts}]
-  (let [rp (mc/->ReadPreference opts)
-        rc (mc/->ReadConcern opts)
-        wc (mc/->WriteConcern opts)]
+  (let [rp (m/->ReadPreference opts)
+        rc (m/->ReadConcern opts)
+        wc (m/->WriteConcern opts)]
 
     (cond-> (TransactionOptions/builder)
       max-commit-time-ms (.maxCommitTime max-commit-time-ms (TimeUnit/MILLISECONDS))
