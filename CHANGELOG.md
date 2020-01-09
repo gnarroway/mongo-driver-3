@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
 
-## 0.6.0-SNAPSHOT
+## 0.6.0 - 2020-01-10
 ### Added
 - Support for bulk-write
 
