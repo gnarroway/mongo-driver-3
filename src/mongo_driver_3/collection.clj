@@ -41,9 +41,9 @@
          rc (->ReadConcern opts)
          wc (->WriteConcern opts)]
      (cond-> ^MongoCollection coll'
-             rp (.withReadPreference rp)
-             rc (.withReadConcern rc)
-             wc (.withWriteConcern wc)))))
+       rp (.withReadPreference rp)
+       rc (.withReadConcern rc)
+       wc (.withWriteConcern wc)))))
 
 ;;; CRUD functions
 
@@ -70,13 +70,41 @@
          it (cond-> (if session
                       (.aggregate (collection db coll opts) session ^List (map document pipeline))
                       (.aggregate (collection db coll opts) ^List (map document pipeline)))
-                    (some? allow-disk-use?) (.allowDiskUse allow-disk-use?)
-                    (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
-                    batch-size (.batchSize batch-size))]
+              (some? allow-disk-use?) (.allowDiskUse allow-disk-use?)
+              (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+              batch-size (.batchSize batch-size))]
 
      (if-not raw?
        (map (fn [x] (from-document x keywordize?)) (seq it))
        it))))
+
+(defn bulk-write
+  "Executes a mix of inserts, updates, replaces, and deletes.
+
+  - `db` is a MongoDatabase
+  - `coll` is a collection name
+  - `operations` a list of 2-tuples in the form `[op config]`,
+    - `op` is one of :insert-one :update-one :update-many :delete-one :delete-many :replace-one
+    - `config` the configuration map for the operation
+      - `insert` takes `:document`
+      - `update` takes `:filter`, `:update`, and any options in the corresponding update function
+      - `delete` takes `:filter`, and any options in the corresponding delete function
+      - `replace` takes `:filter`, `:replacement`, and any options in the corresponding replace function
+  - `opts` (optional), a map of:
+    - `:bypass-document-validation?` Boolean
+    - `:ordered?` Boolean whether serve should insert documents in order provided (default true)
+    - `:bulk-write-options` A BulkWriteOptions for configuring directly. If specified,
+    any other [preceding] query options will be applied to it.
+    - `:session` A ClientSession
+
+  Additionally takes options specified in `collection`"
+  ([^MongoDatabase db coll operations]
+   (bulk-write db coll operations {}))
+  ([^MongoDatabase db coll operations opts]
+   (let [opts' (->BulkWriteOptions opts)]
+     (if-let [session (:session opts)]
+       (.bulkWrite (collection db coll opts') ^ClientSession session ^List (map write-model operations))
+       (.bulkWrite (collection db coll opts') (map write-model operations))))))
 
 (defn count-documents
   "Count documents in a collection, optionally matching a filter query `q`.
@@ -171,10 +199,10 @@
      (let [it (cond-> (if session
                         (.find (collection db coll opts) session (document q))
                         (.find (collection db coll opts) (document q)))
-                      limit (.limit limit)
-                      skip (.skip skip)
-                      sort (.sort (document sort))
-                      projection (.projection (document projection)))]
+                limit (.limit limit)
+                skip (.skip skip)
+                sort (.sort (document sort))
+                projection (.projection (document projection)))]
 
        (if-not raw?
          (map (fn [x] (from-document x keywordize?)) (seq it))

@@ -1,5 +1,5 @@
 (ns mongo-driver-3.model
-  (:import (com.mongodb.client.model CountOptions DeleteOptions ReturnDocument FindOneAndUpdateOptions InsertOneOptions ReplaceOptions UpdateOptions CreateCollectionOptions RenameCollectionOptions InsertManyOptions FindOneAndReplaceOptions IndexOptions)
+  (:import (com.mongodb.client.model CountOptions DeleteOptions ReturnDocument FindOneAndUpdateOptions InsertOneOptions ReplaceOptions UpdateOptions CreateCollectionOptions RenameCollectionOptions InsertManyOptions FindOneAndReplaceOptions IndexOptions BulkWriteOptions DeleteManyModel DeleteOneModel InsertOneModel ReplaceOneModel UpdateManyModel UpdateOneModel)
            (org.bson Document)
            (java.util.concurrent TimeUnit)
            (com.mongodb WriteConcern ReadPreference ReadConcern)
@@ -91,7 +91,7 @@
     (if (instance? ReadConcern read-concern)
       read-concern
       (or (kw->ReadConcern read-concern) (throw (IllegalArgumentException.
-                                                  (str "No match for read concern of " (name read-concern))))))))
+                                                 (str "No match for read concern of " (name read-concern))))))))
 
 (defn ->ReadPreference
   "Coerce `rp` into a ReadPreference if not nil. See `collection` for usage."
@@ -110,19 +110,27 @@
                                write-concern
                                (WriteConcern/valueOf (name write-concern))))]
       (cond-> (or wc (WriteConcern/ACKNOWLEDGED))
-              w (.withW w)
-              w-timeout-ms (.withWTimeout w-timeout-ms (TimeUnit/MILLISECONDS))
-              (some? journal?) (.withJournal journal?)))))
+        w (.withW w)
+        w-timeout-ms (.withWTimeout w-timeout-ms (TimeUnit/MILLISECONDS))
+        (some? journal?) (.withJournal journal?)))))
+
+(defn ^BulkWriteOptions ->BulkWriteOptions
+  "Coerce options map into BulkWriteOptions. See `bulk-write` for usage."
+  [{:keys [bulk-write-options bypass-document-validation? ordered?]}]
+  (let [^BulkWriteOptions opts (or bulk-write-options (BulkWriteOptions.))]
+    (cond-> opts
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+      (some? ordered?) (.ordered ordered?))))
 
 (defn ^CountOptions ->CountOptions
   "Coerce options map into CountOptions. See `count-documents` for usage."
   [{:keys [count-options hint limit max-time-ms skip]}]
   (let [^CountOptions opts (or count-options (CountOptions.))]
     (cond-> opts
-            hint (.hint (document hint))
-            limit (.limit limit)
-            max-time-ms (.maxTime max-time-ms (TimeUnit/MILLISECONDS))
-            skip (.skip skip))))
+      hint (.hint (document hint))
+      limit (.limit limit)
+      max-time-ms (.maxTime max-time-ms (TimeUnit/MILLISECONDS))
+      skip (.skip skip))))
 
 (defn ^DeleteOptions ->DeleteOptions
   "Coerce options map into DeleteOptions. See `delete-one` and `delete-many` for usage."
@@ -135,20 +143,20 @@
   [{:keys [find-one-and-replace-options upsert? return-new? sort projection]}]
   (let [^FindOneAndReplaceOptions opts (or find-one-and-replace-options (FindOneAndReplaceOptions.))]
     (cond-> opts
-            (some? upsert?) (.upsert upsert?)
-            return-new? (.returnDocument (ReturnDocument/AFTER))
-            sort (.sort (document sort))
-            projection (.projection (document projection)))))
+      (some? upsert?) (.upsert upsert?)
+      return-new? (.returnDocument (ReturnDocument/AFTER))
+      sort (.sort (document sort))
+      projection (.projection (document projection)))))
 
 (defn ^FindOneAndUpdateOptions ->FindOneAndUpdateOptions
   "Coerce options map into FindOneAndUpdateOptions. See `find-one-and-update` for usage."
   [{:keys [find-one-and-update-options upsert? return-new? sort projection]}]
   (let [^FindOneAndUpdateOptions opts (or find-one-and-update-options (FindOneAndUpdateOptions.))]
     (cond-> opts
-            (some? upsert?) (.upsert upsert?)
-            return-new? (.returnDocument (ReturnDocument/AFTER))
-            sort (.sort (document sort))
-            projection (.projection (document projection)))))
+      (some? upsert?) (.upsert upsert?)
+      return-new? (.returnDocument (ReturnDocument/AFTER))
+      sort (.sort (document sort))
+      projection (.projection (document projection)))))
 
 (defn ^IndexOptions ->IndexOptions
   "Coerces an options map into an IndexOptions.
@@ -157,55 +165,80 @@
   [{:keys [index-options name sparse? unique?]}]
   (let [^IndexOptions opts (or index-options (IndexOptions.))]
     (cond-> opts
-            name (.name name)
-            (some? sparse?) (.sparse sparse?)
-            (some? unique?) (.unique unique?))))
+      name (.name name)
+      (some? sparse?) (.sparse sparse?)
+      (some? unique?) (.unique unique?))))
 
 (defn ^InsertManyOptions ->InsertManyOptions
   "Coerce options map into InsertManyOptions. See `insert-many` for usage."
   [{:keys [insert-many-options bypass-document-validation? ordered?]}]
   (let [^InsertManyOptions opts (or insert-many-options (InsertManyOptions.))]
     (cond-> opts
-            (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
-            (some? ordered?) (.ordered ordered?))))
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+      (some? ordered?) (.ordered ordered?))))
 
 (defn ^InsertOneOptions ->InsertOneOptions
   "Coerce options map into InsertOneOptions. See `insert-one` for usage."
   [{:keys [insert-one-options bypass-document-validation?]}]
   (let [^InsertOneOptions opts (or insert-one-options (InsertOneOptions.))]
     (cond-> opts
-            (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
 
 (defn ^ReplaceOptions ->ReplaceOptions
   "Coerce options map into ReplaceOptions. See `replace-one` and `replace-many` for usage."
   [{:keys [replace-options upsert? bypass-document-validation?]}]
   (let [^ReplaceOptions opts (or replace-options (ReplaceOptions.))]
     (cond-> opts
-            (some? upsert?) (.upsert upsert?)
-            (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
+      (some? upsert?) (.upsert upsert?)
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
 
 (defn ^UpdateOptions ->UpdateOptions
   "Coerce options map into UpdateOptions. See `update-one` and `update-many` for usage."
   [{:keys [update-options upsert? bypass-document-validation?]}]
   (let [^UpdateOptions opts (or update-options (UpdateOptions.))]
     (cond-> opts
-            (some? upsert?) (.upsert upsert?)
-            (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
+      (some? upsert?) (.upsert upsert?)
+      (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?))))
 
 (defn ^CreateCollectionOptions ->CreateCollectionOptions
   "Coerce options map into CreateCollectionOptions. See `create` usage."
   [{:keys [create-collection-options capped? max-documents max-size-bytes]}]
   (let [^CreateCollectionOptions opts (or create-collection-options (CreateCollectionOptions.))]
     (cond-> opts
-            (some? capped?) (.capped capped?)
-            max-documents (.maxDocuments max-documents)
-            max-size-bytes (.sizeInBytes max-size-bytes))))
+      (some? capped?) (.capped capped?)
+      max-documents (.maxDocuments max-documents)
+      max-size-bytes (.sizeInBytes max-size-bytes))))
 
 (defn ^RenameCollectionOptions ->RenameCollectionOptions
   "Coerce options map into RenameCollectionOptions. See `rename` usage."
   [{:keys [rename-collection-options drop-target?]}]
   (let [^RenameCollectionOptions opts (or rename-collection-options (RenameCollectionOptions.))]
     (cond-> opts
-            (some? drop-target?) (.dropTarget drop-target?))))
+      (some? drop-target?) (.dropTarget drop-target?))))
 
+(defmulti write-model
+  (fn [[type _]] type))
 
+(defmethod write-model :delete-many
+  [[_ opts]]
+  (DeleteManyModel. (document (:filter opts)) (->DeleteOptions opts)))
+
+(defmethod write-model :delete-one
+  [[_ opts]]
+  (DeleteOneModel. (document (:filter opts)) (->DeleteOptions opts)))
+
+(defmethod write-model :insert-one
+  [[_ opts]]
+  (InsertOneModel. (document (:document opts))))
+
+(defmethod write-model :replace-one
+  [[_ opts]]
+  (ReplaceOneModel. (document (:filter opts)) (document (:replacement opts)) (->ReplaceOptions opts)))
+
+(defmethod write-model :update-many
+  [[_ opts]]
+  (UpdateManyModel. (document (:filter opts)) (document (:update opts)) (->UpdateOptions opts)))
+
+(defmethod write-model :update-one
+  [[_ opts]]
+  (UpdateOneModel. (document (:filter opts)) (document (:update opts)) (->UpdateOptions opts)))

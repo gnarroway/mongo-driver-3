@@ -232,6 +232,28 @@
       (is (nil? (dissoc (mc/find-one-and-replace db "test" {:id 1} {:id 1 :v 2} {:return-new? true}) :_id)))
       (is (= {:id 1 :v 2} (dissoc (mc/find-one-and-replace db "test" {:id 1} {:id 1 :v 2} {:return-new? true :upsert? true}) :_id))))))
 
+(deftest ^:integration test-bulk-write
+  (testing "existing docs"
+    (let [db (new-db @client)
+          _ (mc/insert-many db "test" [{:id 1} {:id 2} {:id 3} {:id 4}])
+          _ (mc/bulk-write db "test" [[:replace-one {:filter {:id 2} :replacement {:id 2.1}}]
+                                      [:update-many {:filter {:id 3} :update {:$set {:a "b"}}}]
+                                      [:update-one {:filter {:id 4} :update {:$set {:a "b"}}}]])]
+
+      (is (= [{:id 1} {:id 2.1} {:id 3 :a "b"} {:id 4 :a "b"}]
+             (mc/find db "test" {} {:projection {:_id 0}})))))
+
+  (testing "upsert"
+    (let [db (new-db @client)
+          res (mc/bulk-write db "test" [[:insert-one {:document {:id 1}}]
+                                        [:replace-one {:filter {:id 2} :replacement {:id 2.1} :upsert? true}]
+                                        [:update-many {:filter {:id 3} :update {:$set {:a "b"}} :upsert? true}]
+                                        [:update-one {:filter {:id 4} :update {:$set {:a "b"}} :upsert? true}]])]
+
+      (is (= 4 (mc/count-documents db "test")))
+      (is (= 1 (.getInsertedCount res)))
+      (is (= 3 (count (.getUpserts res)))))))
+
 (deftest ^:integration test-replace-one
   (testing "existing doc"
     (let [db (new-db @client)

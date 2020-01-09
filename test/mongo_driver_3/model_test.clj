@@ -3,7 +3,7 @@
             [mongo-driver-3.model :as m])
   (:import (com.mongodb ReadConcern ReadPreference WriteConcern)
            (java.util.concurrent TimeUnit)
-           (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions UpdateOptions ReplaceOptions IndexOptions CreateCollectionOptions RenameCollectionOptions)))
+           (com.mongodb.client.model InsertOneOptions InsertManyOptions DeleteOptions FindOneAndUpdateOptions ReturnDocument FindOneAndReplaceOptions CountOptions UpdateOptions ReplaceOptions IndexOptions CreateCollectionOptions RenameCollectionOptions BulkWriteOptions DeleteManyModel DeleteOneModel InsertOneModel ReplaceOneModel UpdateManyModel UpdateOneModel)))
 
 ;;; Unit
 
@@ -44,7 +44,8 @@
        (= expected (.isUpsert (m/->ReplaceOptions {:upsert? arg})))
     true true
     false false
-    false nil) (is (true? (.getBypassDocumentValidation (m/->ReplaceOptions {:bypass-document-validation? true}))))
+    false nil)
+  (is (true? (.getBypassDocumentValidation (m/->ReplaceOptions {:bypass-document-validation? true}))))
   (is (true? (.getBypassDocumentValidation (m/->ReplaceOptions
                                             {:replace-options (.bypassDocumentValidation (ReplaceOptions.) true)})))
       "configure directly")
@@ -85,7 +86,7 @@
                                             {:insert-many-options (.bypassDocumentValidation (InsertManyOptions.) true)})))
       "configure directly")
   (is (false? (.getBypassDocumentValidation (m/->InsertManyOptions
-                                             {:insert-one-options          (.bypassDocumentValidation (InsertManyOptions.) true)
+                                             {:insert-many-options          (.bypassDocumentValidation (InsertManyOptions.) true)
                                               :bypass-document-validation? false})))
       "can override"))
 
@@ -177,3 +178,58 @@
     (is (= 5 (.getMaxDocuments (m/->CreateCollectionOptions {:create-collection-options opts}))))
     (is (= 7 (.getMaxDocuments (m/->CreateCollectionOptions {:create-collection-options opts :max-documents 7})))
         "can override")))
+
+(deftest test->BulkWriteOptions
+  (is (instance? BulkWriteOptions (m/->BulkWriteOptions {})))
+  (are [expected arg]
+       (= expected (.getBypassDocumentValidation (m/->BulkWriteOptions {:bypass-document-validation? arg})))
+    true true
+    false false
+    nil nil)
+  (are [expected arg]
+       (= expected (.isOrdered (m/->BulkWriteOptions {:ordered? arg})))
+    true true
+    false false
+    true nil)
+  (is (true? (.getBypassDocumentValidation (m/->BulkWriteOptions
+                                            {:bulk-write-options (.bypassDocumentValidation (BulkWriteOptions.) true)})))
+      "configure directly")
+  (is (false? (.getBypassDocumentValidation (m/->BulkWriteOptions
+                                             {:bulk-write-options         (.bypassDocumentValidation (BulkWriteOptions.) true)
+                                              :bypass-document-validation? false})))
+      "can override"))
+
+(deftest test-write-model
+  (testing "delete many"
+    (is (instance? DeleteManyModel (m/write-model [:delete-many {:filter {:a "b"}}]))))
+
+  (testing "delete one"
+    (is (instance? DeleteOneModel (m/write-model [:delete-one {:filter {:a "b"}}]))))
+
+  (testing "insert one"
+    (is (instance? InsertOneModel (m/write-model [:insert-one {:document {:a "b"}}]))))
+
+  (testing "replace one"
+    (is (instance? ReplaceOneModel (m/write-model [:replace-one {:filter {:a "b"} :replacement {:a "c"}}])))
+    (are [expected arg]
+         (= expected (.isUpsert (.getOptions (m/write-model [:replace-one {:filter {:a "b"} :replacement {:a "c"} :upsert? arg}]))))
+      true true
+      false false
+      false nil))
+
+  (testing "update many"
+    (is (instance? UpdateManyModel (m/write-model [:update-many {:filter {:a "b"} :update {"$set" {:a "c"}}}])))
+    (are [expected arg]
+         (= expected (.isUpsert (.getOptions (m/write-model [:update-many {:filter {:a "b"} :update {"$set" {:a "c"}} :upsert? arg}]))))
+      true true
+      false false
+      false nil))
+
+  (testing "update one"
+    (is (instance? UpdateOneModel (m/write-model [:update-one {:filter {:a "b"} :update {"$set" {:a "c"}}}])))
+    (are [expected arg]
+         (= expected (.isUpsert (.getOptions (m/write-model [:update-one {:filter {:a "b"} :update {"$set" {:a "c"}} :upsert? arg}]))))
+      true true
+      false false
+      false nil)))
+
