@@ -135,6 +135,27 @@ Many mongo queries take operators like `$eq` and `$gt`. These are exposed in the
 (mc/find db "test" {:a {"$gt" 3}})
 ```
 
+### Bulk operations
+
+The bulk API is similar to the [mongo shell](https://docs.mongodb.com/manual/reference/method/db.collection.bulkWrite/),
+except each operation is defined as a 2-tuple rather than a map.
+
+```clojure
+;; Execute a mix of operations in one go
+(bulk-write [[:insert-one {:document {:a 1}}]
+             [:delete-one {:filter {:a 1}}]
+             [:delete-many {:filter {:a 1}}]
+             [:update-one {:filter {:a 1} :update {:$set {:a 2}}}]
+             [:update-many {:filter {:a 1} :update {:$set {:a 2}}}]
+             [:replace-one {:filter {:a 1} :replacement {:a 2}}]])
+; => a BulkWriteResult
+             
+;; Each operation can take the same options as their respective functions
+(bulk-write [[:update-one {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
+             [:update-many {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
+             [:replace-one {:filter {:a 1} :replacement {:a 2} :upsert? true}]])
+```
+
 ### Using transactions
 
 You can create a session to perform multi-document transactions, where all operations either

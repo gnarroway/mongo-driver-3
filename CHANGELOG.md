@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
 
+## 0.6.0-SNAPSHOT
+### Added
+- Support for bulk-write
+
+### Changed
+- Moved option creators and document conversion to the `mongo-driver-3.model` namespace (breaking change)
+
 ## 0.5.0 - 2019-11-22
 ### Added
 - Support for transactions
