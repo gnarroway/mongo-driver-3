@@ -4,7 +4,7 @@
            (java.util.concurrent TimeUnit)
            (com.mongodb WriteConcern ReadPreference ReadConcern)
            (clojure.lang Ratio Keyword Named IPersistentMap)
-           (java.util Collection List)
+           (java.util Collection List Date)
            (org.bson.types Decimal128)))
 
 (set! *warn-on-reflection* true)
@@ -13,6 +13,12 @@
 
 (defprotocol ConvertToDocument
   (^Document document [input] "Convert from clojure to Mongo Document"))
+
+(defn read-dates-as-instants! []
+  (extend-protocol ConvertToDocument
+    Date 
+    (from-document [input _]
+      (.toInstant ^Date input))))
 
 (extend-protocol ConvertToDocument
   nil
