@@ -5,7 +5,7 @@
 [![cljdoc badge](https://cljdoc.org/badge/mongo-driver-3/mongo-driver-3)](https://cljdoc.org/d/mongo-driver-3/mongo-driver-3/CURRENT)
 
 
-A Mongo client for clojure, lightly wrapping 3.11+ versions of the [MongoDB Java Driver](https://mongodb.github.io/mongo-java-driver/)
+A Mongo client for clojure, lightly wrapping 3.11/4.0+ versions of the [MongoDB Java Driver](https://mongodb.github.io/mongo-java-driver/)
 
 In general, it will feel familiar to users of mongo clients like [monger](https://github.com/michaelklishin/monger).
 Like our HTTP/2 client [hato](https://github.com/gnarroway/hato), the API is designed to be idiomatic and to make common 
@@ -35,7 +35,7 @@ For Leinengen, add this to your project.clj:
 [org.mongodb/mongodb-driver-sync "3.11.2"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.6.0"]
+[mongo-driver-3 "0.5.0"]
 ```
 
 ## Getting started
@@ -142,18 +142,18 @@ except each operation is defined as a 2-tuple rather than a map.
 
 ```clojure
 ;; Execute a mix of operations in one go
-(,c/bulk-write [[:insert-one {:document {:a 1}}]
-               [:delete-one {:filter {:a 1}}]
-               [:delete-many {:filter {:a 1}}]
-               [:update-one {:filter {:a 1} :update {:$set {:a 2}}}]
-               [:update-many {:filter {:a 1} :update {:$set {:a 2}}}]
-               [:replace-one {:filter {:a 1} :replacement {:a 2}}]])
+(bulk-write [[:insert-one {:document {:a 1}}]
+             [:delete-one {:filter {:a 1}}]
+             [:delete-many {:filter {:a 1}}]
+             [:update-one {:filter {:a 1} :update {:$set {:a 2}}}]
+             [:update-many {:filter {:a 1} :update {:$set {:a 2}}}]
+             [:replace-one {:filter {:a 1} :replacement {:a 2}}]])
 ; => a BulkWriteResult
              
 ;; Each operation can take the same options as their respective functions
-(mc/bulk-write [[:update-one {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
-               [:update-many {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
-               [:replace-one {:filter {:a 1} :replacement {:a 2} :upsert? true}]])
+(bulk-write [[:update-one {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
+             [:update-many {:filter {:a 1} :update {:$set {:a 2}} :upsert? true}]
+             [:replace-one {:filter {:a 1} :replacement {:a 2} :upsert? true}]])
 ```
 
 ### Using transactions

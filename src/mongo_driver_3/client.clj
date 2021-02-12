@@ -130,11 +130,14 @@
   Ensure `session` is passed as an option to each operation.
 
   e.g.
+
+  ```clojure
   (with-open [s (start-session client)]
     (with-transaction s
       (fn []
         (insert-one my-db \"coll\" {:name \"hello\"} {:session s})
-        (insert-one my-db \"coll\" {:name \"world\"} {:session s}))))"
+        (insert-one my-db \"coll\" {:name \"world\"} {:session s}))))
+  ```"
   ([^ClientSession session body] (with-transaction session body {}))
   ([^ClientSession session body opts]
    (.withTransaction session
