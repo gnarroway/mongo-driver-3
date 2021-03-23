@@ -1,8 +1,9 @@
 (ns mongo-driver-3.client-test
   (:require [clojure.test :refer :all]
             [mongo-driver-3.client :as mg]
-            [mongo-driver-3.collection :as mc])
-  (:import (com.mongodb.client MongoClient MongoDatabase MongoIterable ListCollectionsIterable)
+            [mongo-driver-3.collection :as mc]
+            [mongo-driver-3.model :as m])
+  (:import (com.mongodb.client MongoClient MongoDatabase MongoIterable ListCollectionsIterable ClientSession)
            (java.util UUID)
            (com.mongodb ClientSessionOptions ReadConcern ReadPreference)
            (java.util.concurrent TimeUnit)))
@@ -83,23 +84,44 @@
 
   (deftest ^:integration test-with-transaction
     (let [db (new-db @client)
-          _ (mc/create db "test")]
+          _  (mc/create db "test")]
       (with-open [session (mg/start-session @client)]
         (is (= 2 (mg/with-transaction session
+                                      (fn []
+                                        (mc/insert-one db "test" {:a 1} {:session session})
+                                        (mc/insert-one db "test" {:a 2} {:session session})
+                                        (mc/count-documents db "test" {} {:session session}))))))))
+
+  (deftest ^:integration test-with-implicit-transaction
+    (testing "passing"
+      (let [db (new-db @client)
+            _  (mc/create db "test")]
+        (is (= 2 (mg/with-implicit-transaction
+                   {:client @client}
                    (fn []
-                     (mc/insert-one db "test" {:a 1} {:session session})
-                     (mc/insert-one db "test" {:a 2} {:session session})
-                     (mc/count-documents db "test" {} {:session session}))))))))
+                     (mc/insert-one db "test" {:a 1})
+                     (mc/insert-one db "test" {:a 2})
+                     (mc/count-documents db "test" {})))))))
+
+    (testing "failing"
+      (let [db (new-db @client)
+            _  (mc/create db "test")]
+        (is (= 0 (try (mg/with-implicit-transaction
+                        {:client @client}
+                        (fn []
+                          (mc/insert-one db "test" {:a 1})
+                          (mc/insert-one db "test" {nil 2})))
+                      (catch Exception _ (mc/count-documents db "test" {}))))))))
 
   (deftest ^:integration test-with-transaction
     (testing "passing"
       (let [db (new-db @client)
-            _ (mc/create db "test")]
+            _  (mc/create db "test")]
         (with-open [session (mg/start-session @client)]
           (is (= 2 (mg/with-transaction session
-                     (fn []
-                       (mc/insert-one db "test" {:a 1} {:session session})
-                       (mc/insert-one db "test" {:a 2} {:session session})
+                                        (fn []
+                                          (mc/insert-one db "test" {:a 1} {:session session})
+                                          (mc/insert-one db "test" {:a 2} {:session session})
                        (mc/count-documents db "test" {} {:session session}))))))))
 
     (testing "failing"

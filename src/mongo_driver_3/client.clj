@@ -145,6 +145,20 @@
                        (execute [_] (body)))
                      (->TransactionOptions opts))))
 
+
+(def ^:dynamic *session* nil)
+
+(defn with-implicit-transaction
+  "Automatically sets the session / transaction for all mongo operations
+   within the scope, using a dynamic binding"
+  [{:keys [^MongoClient client transaction-opts session-opts] :or {transaction-opts {} session-opts {}}} body]
+  (with-open [^ClientSession session (start-session client session-opts)]
+    (binding [*session* session]
+      (with-transaction
+        *session*
+        body
+        transaction-opts))))
+
 ;;; Utility
 
 (defn connect-to-db
