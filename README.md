@@ -32,7 +32,7 @@ For Leinengen, add this to your project.clj:
 
 ```clojure
 ;; The underlying driver -- any newer version can also be used
-[org.mongodb/mongodb-driver-sync "4.7.1"]
+[org.mongodb/mongodb-driver-sync "4.2.3"]
 
 ;; This wrapper library
 [mongo-driver-3 "0.7.0"]
