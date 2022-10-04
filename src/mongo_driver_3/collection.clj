@@ -228,7 +228,10 @@
   - `db` is a MongoDatabase
   - `coll` is a collection name
   - `q` is a map representing a query.
-  - `update` is a map representing an update. The update to apply must include only update operators.
+  - `update` is either a map representing a document update or a vector
+    representing an 'aggregation pipeline'. A document update must include only
+    update operators, while an 'aggregation pipeline' can contain multiple
+    stages of `$set`, `$unset` and `$replaceWith`.
   - `opts` (optional), a map of:
     - `:upsert?` whether to insert a new document if nothing is found, default: false
     - `:return-new?` whether to return the document after update (insead of its state before the update), default: false
@@ -246,9 +249,14 @@
    (let [{:keys [keywordize? ^ClientSession session] :or {keywordize? true}} opts
          ^ClientSession session (or session *session*)
          opts'                  (->FindOneAndUpdateOptions opts)]
-     (-> (if session
-           (.findOneAndUpdate (collection db coll opts) session (document q) (document update) opts')
-           (.findOneAndUpdate (collection db coll opts) (document q) (document update) opts'))
+     (-> (if (instance? List update)
+           (let [pipeline ^List (map document update)]
+             (if session
+               (.findOneAndUpdate (collection db coll opts) session (document q) pipeline opts')
+               (.findOneAndUpdate (collection db coll opts) (document q) pipeline opts')))
+           (if session
+             (.findOneAndUpdate (collection db coll opts) session (document q) (document update) opts')
+             (.findOneAndUpdate (collection db coll opts) (document q) (document update) opts')))
          (from-document keywordize?)))))
 
 (defn find-one-and-replace
