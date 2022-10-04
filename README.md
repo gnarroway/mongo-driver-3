@@ -23,7 +23,7 @@ It was developed with the following goals:
 
 ## Status
 
-mongo-driver-3 is used in production, but is also under development and the API may change slightly.
+mongo-driver-3 is used in production, and the existing public API will be maintained.
 Please try it out and raise any issues you may find.
 
 ## Usage
@@ -32,10 +32,10 @@ For Leinengen, add this to your project.clj:
 
 ```clojure
 ;; The underlying driver -- any newer version can also be used
-[org.mongodb/mongodb-driver-sync "3.11.2"]
+[org.mongodb/mongodb-driver-sync "4.2.3"]
 
 ;; This wrapper library
-[mongo-driver-3 "0.5.0"]
+[mongo-driver-3 "0.6.0"]
 ```
 
 ## Getting started
@@ -171,6 +171,14 @@ use `with-open` so the session is closed after both successful and failed transa
     (fn []
       (mc/insert-one my-db "coll" {:name "hello"} {:session s})
       (mc/insert-one my-db "coll" {:name "world"} {:session s}))))
+
+;; There is also a helper method to make this easier,
+;; where it is not necessary to manually open or pass a session:
+(mg/with-implicit-transaction
+  {:client client}
+  (fn []
+    (mc/insert-one my-db "coll" {:name "hello"}) 
+    (mc/insert-one my-db "coll" {:name "world"})))
 ```
 
 ## License

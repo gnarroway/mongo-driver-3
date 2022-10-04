@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
 
+## 0.7.0 - 2022-10-04
+### Added
+- Support reading dates as instances (thanks @henryw374)
+- Support data literal for mongo id (thanks @henryw374)
+- Support for implicit transactions (thanks @AdamClements)
+- Support for aggregation pipeline in find-one-and-update (requires 4.2+, thanks @jacobemcken)
+
 ## 0.6.0 - 2020-01-10
 ### Added
 - Support for bulk-write

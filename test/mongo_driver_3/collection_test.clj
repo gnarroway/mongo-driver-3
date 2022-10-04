@@ -216,7 +216,13 @@
     (let [db (new-db @client)]
 
       (is (nil? (dissoc (mc/find-one-and-update db "test" {:id 1} {:$set {:r 1}} {:return-new? true}) :_id)))
-      (is (= {:id 1 :r 1} (dissoc (mc/find-one-and-update db "test" {:id 1} {:$set {:r 1}} {:return-new? true :upsert? true}) :_id))))))
+      (is (= {:id 1 :r 1} (dissoc (mc/find-one-and-update db "test" {:id 1} {:$set {:r 1}} {:return-new? true :upsert? true}) :_id)))))
+
+  (testing "aggregation pipeline"
+    (let [db (new-db @client)
+          _ (mc/insert-many db "test" [{:id 1 :a [1 2] :b []} {:id 2 :a [7 8] :b []}])]
+
+      (is (= {:id 1 :a [] :b [1 2]} (dissoc (mc/find-one-and-update db "test" {:id 1} [{:$set {:b :$a}} {:$set {:a []}}] {:return-new? true}) :_id))))))
 
 (deftest ^:integration test-find-one-and-replace
   (testing "return new"

@@ -150,7 +150,24 @@
 
 (defn with-implicit-transaction
   "Automatically sets the session / transaction for all mongo operations
-   within the scope, using a dynamic binding"
+   within the scope, using a dynamic binding.
+
+   The first argument is an options map with keys:
+
+   - `:client` a MongoClient (mandatory)
+   - `:transaction-opts` (see `->TransactionOptions` for keys)
+   - `:session-opts` (see `start-session` for details)
+
+   The second argument `body` is a fn with one or more mongo operations in it.
+   e.g.
+
+   ```
+   (mg/with-implicit-transaction
+     {:client client}
+     (fn []
+       (mc/insert-one my-db \"coll\" {:name \"hello\"})
+       (mc/insert-one my-db \"coll\" {:name \"world\"})))
+   ```"
   [{:keys [^MongoClient client transaction-opts session-opts] :or {transaction-opts {} session-opts {}}} body]
   (with-open [^ClientSession session (start-session client session-opts)]
     (binding [*session* session]
