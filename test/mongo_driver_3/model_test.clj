@@ -212,7 +212,7 @@
   (testing "replace one"
     (is (instance? ReplaceOneModel (m/write-model [:replace-one {:filter {:a "b"} :replacement {:a "c"}}])))
     (are [expected arg]
-         (= expected (.isUpsert (.getOptions (m/write-model [:replace-one {:filter {:a "b"} :replacement {:a "c"} :upsert? arg}]))))
+         (= expected (.isUpsert (.getReplaceOptions (m/write-model [:replace-one {:filter {:a "b"} :replacement {:a "c"} :upsert? arg}]))))
       true true
       false false
       false nil))
@@ -220,7 +220,7 @@
   (testing "update many"
     (is (instance? UpdateManyModel (m/write-model [:update-many {:filter {:a "b"} :update {"$set" {:a "c"}}}])))
     (are [expected arg]
-         (= expected (.isUpsert (.getOptions (m/write-model [:update-many {:filter {:a "b"} :update {"$set" {:a "c"}} :upsert? arg}]))))
+         (= expected (.isUpsert (.getOptions ^UpdateManyModel (m/write-model [:update-many {:filter {:a "b"} :update {"$set" {:a "c"}} :upsert? arg}]))))
       true true
       false false
       false nil))
