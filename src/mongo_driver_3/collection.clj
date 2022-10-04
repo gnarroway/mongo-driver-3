@@ -5,7 +5,8 @@
   (:import (com.mongodb MongoNamespace)
            (com.mongodb.client MongoDatabase MongoCollection ClientSession)
            (com.mongodb.client.model IndexModel)
-           (java.util List)))
+           (java.util List)
+           (org.bson Document)))
 
 (set! *warn-on-reflection* true)
 
