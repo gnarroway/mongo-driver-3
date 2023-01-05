@@ -1,25 +1,164 @@
-name: Clojure CI
+name: Test and Build
 
 on:
   push:
-    branches:
-      - master
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
-  build:
-
+  deps:
     runs-on: ubuntu-latest
-
+    permissions: write-all
     steps:
-    - uses: actions/checkout@v1
-    - name: Install dependencies
-      run: lein deps
-    - name: Start mongo
-      run:  sudo docker run --rm -d -p 27017:27017 mongo
-    - name: Run tests
-      run: lein test
-    - name: Publish
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Cache Dependencies
+      uses: actions/cache@v3
       env:
-        CLOJARS_USER: ${{ secrets.CLOJARS_USER }}
-        CLOJARS_PASS: ${{ secrets.CLOJARS_PASS }}
-      run: lein deploy clojars
+        cache-name: artifacts
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{  hashFiles('./project.clj') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+    - name: Prepare java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: 17
+    - name: Install clojure tools
+      uses: DeLaGuardo/setup-clojure@3.2
+      with:
+        lein: 2.10.0
+    - name: Install Dependencies
+      run: lein deps
+  format:
+    needs: deps
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      env:
+        cache-name: artifacts
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{  hashFiles('./project.clj') }}
+    - name: Check Format
+      run: lein cljfmt check
+  linter:
+    needs: deps
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      env:
+        cache-name: artifacts
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{  hashFiles('./project.clj') }}
+    - name: Look for Lint
+      run: lein kibit
+  test:
+    needs: deps
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo
+        options: 
+          --health-cmd "echo 'db.runCommand("ping").ok' | mongosh --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+        ports:
+          - 27017:27017
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      env:
+        cache-name: artifacts
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{  hashFiles('./project.clj') }}
+    - name: Run Unit Tests
+      run: lein test
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      env:
+        cache-name: artifacts
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{  hashFiles('./project.clj') }}
+    - name: Jar and Push to Repository
+      run: lein deploy github
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  notify_success:
+    needs: [format, linter, test, build]
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Project Version
+      id: version
+      run: |
+        version=$(sed -n 's/^.*defproject.* //p' project.clj)
+        echo "::set-output name=value::$version"
+    - name: Success Notification
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.AVAIL_TEAM_SLACK_WEBHOOK }}
+        SLACK_USERNAME: 'Availability Wizard'
+        SLACK_ICON_EMOJI: ':partywizard:'
+        SLACK_TITLE: ${{ github.repository }}
+        MSG_MINIMAL: actions url,commit
+        SLACK_MESSAGE: |
+          ${{ github.workflow }} for ${{ github.ref }} was a success :sunny:
+
+          VERSION: ${{ steps.version.outputs.value }}
+  notify_failure:
+    needs: [format, linter, test, build]
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+    - name: Failure Notification
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.AVAIL_TEAM_SLACK_WEBHOOK }}
+        SLACK_COLOR: '#FF0000'
+        SLACK_USERNAME: 'Availability Wizard'
+        SLACK_ICON_EMOJI: ':partywizard:'
+        SLACK_TITLE: ${{ github.repository }}
+        MSG_MINIMAL: actions url,commit
+        SLACK_MESSAGE: |
+          ${{ github.workflow }} for ${{ github.ref }} was a failure :rain_cloud:
+
+          Formatting: ${{ needs.format.result }}
+          Linter: ${{ needs.linter.result }}
+          Test: ${{ needs.test.result }}
+          Build: ${{ needs.build.result }}
