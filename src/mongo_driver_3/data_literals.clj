@@ -8,18 +8,27 @@
 (defmethod print-method ObjectId [^ObjectId c ^Writer w] (.write w ^String (str "#mongo/id \"" (.toHexString c) "\"")))
 (defmethod print-dup ObjectId [^ObjectId c ^Writer w] (.write w ^String (str "#mongo/id \"" (.toHexString c) "\"")))
 
+(defprotocol AsObjectId 
+  (oid-from [this]))
+
+(extend-protocol AsObjectId 
+  (Class/forName "[B") 
+  (oid-from [this] (ObjectId. ^bytes this))
+  nil 
+  (oid-from [_]    (ObjectId.))
+  String 
+  (oid-from [this] (ObjectId. this))
+  Date 
+  (oid-from [this] (ObjectId. this))
+  ByteBuffer
+  (oid-from [this] (ObjectId. this))
+  )
+
+
+
 (defn mongo-id ;; https://mongodb.github.io/mongo-java-driver/4.8/apidocs/bson/org/bson/types/ObjectId.html
-  (^ObjectId [] (ObjectId.))
-  (^ObjectId [o]
-   (cond
-     (string? o)        (ObjectId. ^String o)
-     (bytes? o)         (ObjectId. ^bytes o)
-     (instance? Date o) (ObjectId. ^Date o)
-     (instance? ByteBuffer o) (ObjectId. ^ByteBuffer o)
-     :else
-     (throw
-      (IllegalArgumentException. 
-       (str "Can not construct an ObjectId from class: " (type o))))))
+  (^ObjectId []  (ObjectId.))
+  (^ObjectId [o] (oid-from o))
   ([o1 o2] 
    (if (and (int? o1) 
             (int? o2))
