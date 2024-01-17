@@ -1,0 +1,1 @@
+["^ ","~$mongo-id",["^ ","~:row",11,"~:col",1,"~:fixed-arities",["~#set",[0,1,2]],"~:name","^0","~:ns","~$mongo-driver-3.data-literals","~:top-ns","^7","~:type","~:fn"],"~:filename","/home/dimitris/vscode/mongo-driver-3/src/mongo_driver_3/data_literals.clj"]
