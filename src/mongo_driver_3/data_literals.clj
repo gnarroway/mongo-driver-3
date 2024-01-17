@@ -29,7 +29,7 @@
 (defn mongo-id ;; https://mongodb.github.io/mongo-java-driver/4.8/apidocs/bson/org/bson/types/ObjectId.html
   (^ObjectId []  (ObjectId.))
   (^ObjectId [o] (oid-from o))
-  ([o1 o2] 
+  (^ObjectId [o1 o2] 
    (if (and (int? o1) 
             (int? o2))
      (ObjectId. (int o1) (int o2))
