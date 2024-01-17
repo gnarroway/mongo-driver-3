@@ -5,8 +5,8 @@
            (java.nio ByteBuffer)))
 
 
-(defmethod print-method ObjectId [^ObjectId c ^Writer w] (.write w ^String (str "#mongo/id \"" (.toHexString c) "\"")))
-(defmethod print-dup ObjectId [^ObjectId c ^Writer w] (.write w ^String (str "#mongo/id \"" (.toHexString c) "\"")))
+(defmethod print-method ObjectId [^ObjectId c ^Writer w] (.write w (str "#mongo/id " \" (.toHexString c) \")))
+(defmethod print-dup ObjectId    [^ObjectId c ^Writer w] (.write w (str "#mongo/id " \" (.toHexString c) \")))
 
 (defprotocol AsObjectId 
   (oid-from [this]))
