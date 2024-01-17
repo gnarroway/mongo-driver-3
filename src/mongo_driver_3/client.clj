@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [find])
   (:require [mongo-driver-3.model :as m]
             [mongo-driver-3.iterable :as iterable])
-  (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase TransactionBody MongoIterable)
+  (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase TransactionBody)
            (com.mongodb ConnectionString ClientSessionOptions TransactionOptions)
            (java.util.concurrent TimeUnit)))
 
