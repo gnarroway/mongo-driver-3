@@ -1,7 +1,8 @@
 (ns mongo-driver-3.collection
   (:refer-clojure :exclude [find empty? drop])
   (:require [mongo-driver-3.model :refer :all]
-            [mongo-driver-3.client :refer [*session*]])
+            [mongo-driver-3.client :refer [*session*]]
+            [mongo-driver-3.iterable :as iterable])
   (:import (com.mongodb MongoNamespace)
            (com.mongodb.client MongoDatabase MongoCollection ClientSession)
            (com.mongodb.client.model IndexModel)
@@ -62,23 +63,27 @@
     - `:batch-size` Documents to return per batch, e.g. 1
     - `:bypass-document-validation?` Boolean
     - `:keywordize?` keywordize the keys of return results, default: true
+    - `:realise-fn` how to realise the MongoIterable, default: `clojure.core/sequence` (i.e. lazily)
     - `:raw?` return the mongo AggregateIterable directly instead of processing into a seq, default: false
     - `:session` a ClientSession"
   ([^MongoDatabase db coll pipeline]
    (aggregate db coll pipeline {}))
   ([^MongoDatabase db coll pipeline opts]
-   (let [{:keys [^ClientSession session allow-disk-use? ^Integer batch-size bypass-document-validation? keywordize? raw?] :or {keywordize? true raw? false}} opts
+   (let [{:keys [^ClientSession session allow-disk-use? ^Integer batch-size bypass-document-validation? keywordize? raw? realise-fn]
+          :or {keywordize? true
+               realise-fn sequence}} opts
          ^ClientSession session (or session *session*)
          it                     (cond-> (if session
                                           (.aggregate (collection db coll opts) session ^List (map document pipeline))
                                           (.aggregate (collection db coll opts) ^List (map document pipeline)))
-                                        (some? allow-disk-use?) (.allowDiskUse allow-disk-use?)
-                                        (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
-                                        batch-size (.batchSize batch-size))]
+                                  (some? allow-disk-use?) (.allowDiskUse allow-disk-use?)
+                                  (some? bypass-document-validation?) (.bypassDocumentValidation bypass-document-validation?)
+                                  batch-size (.batchSize batch-size))]
 
-     (if-not raw?
-       (map (fn [x] (from-document x keywordize?)) (seq it))
-       it))))
+     (if raw?
+       it
+       (realise-fn ;; accomodate users who don't want to use lazy-seqs
+        (iterable/documents it keywordize?))))))
 
 (defn bulk-write
   "Executes a mix of inserts, updates, replaces, and deletes.
@@ -190,26 +195,30 @@
     - `:sort` document representing sort order, e.g. {:timestamp -1}
     - `:projection` document representing fields to return, e.g. {:_id 0}
     - `:keywordize?` keywordize the keys of return results, default: true
+    - `:realise-fn` how to realise the MongoIterable, default: `clojure.core/sequence` (i.e. lazily)
     - `:raw?` return the mongo FindIterable directly instead of processing into a seq, default: false
     - `:session` a ClientSession
 
   Additionally takes options specified in `collection`."
   ([^MongoDatabase db coll q]
    (find db coll q {}))
-  ([^MongoDatabase db coll q opts]
-   (let [{:keys [limit skip sort projection ^ClientSession session keywordize? raw?] :or {keywordize? true raw? false}} opts]
-     (let [^ClientSession session (or session *session*)
-           it                     (cond-> (if session
-                                            (.find (collection db coll opts) session (document q))
-                                            (.find (collection db coll opts) (document q)))
-                                          limit (.limit limit)
-                                          skip (.skip skip)
-                                          sort (.sort (document sort))
-                                          projection (.projection (document projection)))]
+  ([^MongoDatabase db coll q {:keys [limit skip sort projection ^ClientSession session keywordize? raw? realise-fn]
+                              :or {keywordize? true 
+                                   realise-fn sequence}
+                              :as opts}]
+   (let [^ClientSession session (or session *session*)
+         it                     (cond-> (if session
+                                          (.find (collection db coll opts) session (document q))
+                                          (.find (collection db coll opts) (document q)))
+                                  limit (.limit limit)
+                                  skip (.skip skip)
+                                  sort (.sort (document sort))
+                                  projection (.projection (document projection)))]
 
-       (if-not raw?
-         (map (fn [x] (from-document x keywordize?)) (seq it))
-         it)))))
+     (if raw? 
+       it
+       (realise-fn ;; accomodate users who don't want to use lazy-seqs
+         (iterable/documents it keywordize?))))))
 
 (defn find-one
   "Finds a single document and returns it as a clojure map, or nil if not found.
@@ -493,7 +502,7 @@
    (create-indexes db coll indexes {}))
   ([^MongoDatabase db coll indexes opts]
    (->> indexes
-        (map (fn [x] (IndexModel. (document (:keys x)) (->IndexOptions x))))
+        (mapv (fn [x] (IndexModel. (document (:keys x)) (->IndexOptions x))))
         (.createIndexes (collection db coll opts)))))
 
 (defn list-indexes
@@ -501,5 +510,7 @@
   ([^MongoDatabase db coll]
    (list-indexes db coll {}))
   ([^MongoDatabase db coll opts]
-   (->> (.listIndexes (collection db coll opts))
-        (map #(from-document % true)))))
+   (let [it (.listIndexes (collection db coll opts))
+         realise-fn (:realise-fn opts sequence)]
+     (realise-fn 
+       (iterable/documents it true)))))

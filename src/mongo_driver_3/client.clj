@@ -1,6 +1,7 @@
 (ns mongo-driver-3.client
   (:refer-clojure :exclude [find])
-  (:require [mongo-driver-3.model :as m])
+  (:require [mongo-driver-3.model :as m]
+            [mongo-driver-3.iterable :as iterable])
   (:import (com.mongodb.client MongoClients MongoClient ClientSession MongoDatabase TransactionBody)
            (com.mongodb ConnectionString ClientSessionOptions TransactionOptions)
            (java.util.concurrent TimeUnit)))
@@ -15,16 +16,15 @@
   `connection-string` is a mongo connection string, e.g. mongodb://localhost:27107
 
   If a connecting string is not passed in, it will connect to the default localhost instance."
-  ([] (MongoClients/create))
-  ([^String connection-string]
-   (MongoClients/create connection-string)))
+  (^MongoClient []                          (MongoClients/create))
+  (^MongoClient [^String connection-string] (MongoClients/create connection-string)))
 
 (defn get-db
   "Gets a database by name
 
   `client` is a MongoClient, e.g. resulting from calling `connect`
   `name` is the name of the database to get."
-  [^MongoClient client ^String name]
+  ^MongoDatabase [^MongoClient client ^String name]
   (.getDatabase client name))
 
 (defn close
@@ -41,16 +41,20 @@
   - `opts` (optional), a map of:
     - `:name-only?` returns just the string names
     - `:keywordize?` keywordize the keys of return results, default: true. Only applicable if `:name-only?` is false.
-    - `:raw?` return the mongo iterable directly instead of processing into a seq, default: false
+    - `:raw?` return the mongo iterable directly instead of processing into a clj data-structure, default: false
+    - `:realise-fn` how to realise the MongoIterable, default: `clojure.core/sequence` (i.e. lazily)
     - `:session` a ClientSession"
   ([^MongoDatabase db] (list-collections db {}))
-  ([^MongoDatabase db {:keys [raw? keywordize? ^ClientSession session] :or {keywordize? true}}]
+  ([^MongoDatabase db {:keys [raw? keywordize? ^ClientSession session realise-fn] 
+                       :or {keywordize? true
+                            realise-fn sequence}}]
    (let [it (if session
               (.listCollections db session)
               (.listCollections db))]
-     (if-not raw?
-       (map #(m/from-document % keywordize?) (seq it))
-       it))))
+     (if raw?
+       it
+       (realise-fn ;; accomodate users who don't want to use lazy-seqs
+         (iterable/documents it keywordize?))))))
 
 (defn list-collection-names
   "Lists collection names in a database, returning as a seq of strings unless otherwise configured.
@@ -66,9 +70,9 @@
    (let [it (if-let [^ClientSession session (:session opts)]
               (.listCollectionNames db session)
               (.listCollectionNames db))]
-     (if-not (:raw? opts)
-       (seq it)
-       it))))
+     (if (:raw? opts)
+       it
+       (seq it)))))
 
 (defn ->TransactionOptions
   "Coerces options map into a TransactionOptions. See `start-session` for usage."
