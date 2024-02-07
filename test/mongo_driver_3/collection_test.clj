@@ -144,7 +144,11 @@
       (is (instance? FindIterable (mc/find db "test" {} {:raw? true}))))
 
     (testing "keywordize"
-      (is (= [{"id" 1}] (mc/find db "test" {} {:keywordize? false :projection {:_id 0 :id 1} :limit 1}))))))
+      (is (= [{"id" 1}] (mc/find db "test" {} {:keywordize? false :projection {:_id 0 :id 1} :limit 1}))))
+
+    (testing "realise-fn"
+      (is (seq? (mc/find db "test" {})))
+      (is (vector? (mc/find db "test" {} {:realise-fn (partial into [])}))))))
 
 (deftest ^:integration test-find-one
   (let [db (new-db @client)
@@ -382,7 +386,11 @@
 (deftest ^:integration test-list-indexes
   (let [db (new-db @client)
         _ (mc/create db "test")]
-    (is (= 1 (count (mc/list-indexes db "test"))) "has default index")))
+    (is (= 1 (count (mc/list-indexes db "test"))) "has default index")
+
+    (testing "realise-fn"
+      (is (seq? (mc/list-indexes db "test")))
+      (is (vector? (mc/list-indexes db "test" {:realise-fn (partial into [])}))))))
 
 (deftest ^:integration test-create-index
   (let [db (new-db @client)

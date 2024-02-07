@@ -32,7 +32,7 @@ For Leinengen, add this to your project.clj:
 
 ```clojure
 ;; The underlying driver -- any newer version can also be used
-[org.mongodb/mongodb-driver-sync "4.7.1"]
+[org.mongodb/mongodb-driver-sync "4.11.1"]
 
 ;; This wrapper library
 [mongo-driver-3 "0.7.0"]
@@ -104,6 +104,10 @@ As an example:
 ;; Find a single document or return nil
 (mc/find-one db "test" {:v "world"} {:keywordize? false})
 ; => {"v" "world"}
+
+;; Avoid laziness in queries 
+(mc/find db "test" {} {:realise-fn (partial into [])}
+; => [...]
 ```
 
 While most options are supported directly, sometimes you may need to some extra control.
@@ -180,6 +184,13 @@ use `with-open` so the session is closed after both successful and failed transa
     (mc/insert-one my-db "coll" {:name "hello"}) 
     (mc/insert-one my-db "coll" {:name "world"})))
 ```
+
+## Development
+
+1. Run mongo (e.g. via docker):
+    - `docker run -it --rm -p 27017:27017 mongo`
+2. Run tests
+    - `lein test`
 
 ## License
 
