@@ -1,9 +1,18 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
 
+## Unreleased
+
+## 0.8.0 - 2024-02-07
+### Added
+- Support for passing `:realise-fn` to avoid lazy response (thanks @jimpil)
+
+### Changed
+- Remove reflective calls
+
 ## 0.7.0 - 2022-10-04
 ### Added
-- Support reading dates as instances (thanks @henryw374)
+- Support reading dates as instanceres (thanks @henryw374)
 - Support data literal for mongo id (thanks @henryw374)
 - Support for implicit transactions (thanks @AdamClements)
 - Support for aggregation pipeline in find-one-and-update (requires 4.2+, thanks @jacobemcken)
