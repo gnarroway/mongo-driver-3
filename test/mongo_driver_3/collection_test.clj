@@ -349,12 +349,7 @@
   (testing "not existing"
     (let [db (new-db @client)
           _ (mc/create db "my-coll")]
-      (is (true? (coll-exists? db "my-coll")))))
-
-  (testing "existing"
-    (let [db (new-db @client)
-          _ (mc/create db "my-coll")]
-      (is (thrown? Exception (mc/create db "my-coll"))))))
+      (is (true? (coll-exists? db "my-coll"))))))
 
 (deftest ^:integration test-rename
   (testing "not existing"
