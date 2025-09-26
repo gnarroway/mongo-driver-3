@@ -203,7 +203,7 @@
   ([^MongoDatabase db coll q]
    (find db coll q {}))
   ([^MongoDatabase db coll q {:keys [limit skip sort projection ^ClientSession session keywordize? raw? realise-fn]
-                              :or {keywordize? true 
+                              :or {keywordize? true
                                    realise-fn sequence}
                               :as opts}]
    (let [^ClientSession session (or session *session*)
@@ -215,7 +215,7 @@
                                   sort (.sort (document sort))
                                   projection (.projection (document projection)))]
 
-     (if raw? 
+     (if raw?
        it
        (realise-fn ;; accomodate users who don't want to use lazy-seqs
          (iterable/documents it keywordize?))))))
@@ -366,7 +366,7 @@
 
   Additionally takes options specified in `collection`"
   ([^MongoDatabase db coll q doc]
-   (find-one-and-replace db coll q doc {}))
+   (replace-one db coll q doc {}))
   ([^MongoDatabase db coll q doc opts]
    (if-let [^ClientSession session (or (:session opts) *session*)]
      (.replaceOne (collection db coll opts) session (document q) (document doc) (->ReplaceOptions opts))
@@ -512,5 +512,5 @@
   ([^MongoDatabase db coll opts]
    (let [it (.listIndexes (collection db coll opts))
          realise-fn (:realise-fn opts sequence)]
-     (realise-fn 
-       (iterable/documents it true)))))
+     (realise-fn
+      (iterable/documents it true)))))
